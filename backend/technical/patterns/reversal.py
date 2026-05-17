@@ -10,7 +10,7 @@ class PatternResult:
     direction: str
     key_levels: list[float]
     formed_at: str
-    target: float | None = None
+    price_target: float | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -19,7 +19,7 @@ class PatternResult:
             "direction": self.direction,
             "key_levels": self.key_levels,
             "formed_at": self.formed_at,
-            "target": self.target,
+            "price_target": self.price_target,
         }
 
 
@@ -45,7 +45,7 @@ def detect_double_bottom(data: pd.DataFrame) -> PatternResult | None:
         return None
 
     confidence = min(1.0, depth / (lows.std() * 2))
-    target = neck + depth
+    price_target = neck + depth
     formed_ts = str(data["ts"].iloc[t2]) if "ts" in data.columns else ""
 
     return PatternResult(
@@ -54,7 +54,7 @@ def detect_double_bottom(data: pd.DataFrame) -> PatternResult | None:
         direction="bullish",
         key_levels=[round(trough_avg, 2), round(neck, 2)],
         formed_at=formed_ts,
-        target=round(target, 2),
+        price_target=round(price_target, 2),
     )
 
 
@@ -80,7 +80,7 @@ def detect_double_top(data: pd.DataFrame) -> PatternResult | None:
         return None
 
     confidence = min(1.0, depth / (highs.std() * 2))
-    target = neck - depth
+    price_target = neck - depth
     formed_ts = str(data["ts"].iloc[t2]) if "ts" in data.columns else ""
 
     return PatternResult(
@@ -89,7 +89,7 @@ def detect_double_top(data: pd.DataFrame) -> PatternResult | None:
         direction="bearish",
         key_levels=[round(neck, 2), round(peak_avg, 2)],
         formed_at=formed_ts,
-        target=round(target, 2),
+        price_target=round(price_target, 2),
     )
 
 
@@ -118,5 +118,55 @@ def detect_head_and_shoulders(data: pd.DataFrame) -> PatternResult | None:
         direction="bearish",
         key_levels=[round(neckline, 2), round(h_head, 2)],
         formed_at=formed_ts,
-        target=round(neckline - depth, 2),
+        price_target=round(neckline - depth, 2),
+    )
+
+
+def detect_triple_bottom(data: pd.DataFrame) -> PatternResult | None:
+    lows = data["low"].values
+    troughs, _ = find_peaks(-lows, distance=10, prominence=lows.std() * 0.2)
+    if len(troughs) < 3:
+        return None
+    t1, t2, t3 = troughs[-3], troughs[-2], troughs[-1]
+    p1, p2, p3 = lows[t1], lows[t2], lows[t3]
+    avg = (p1 + p2 + p3) / 3
+    if max(abs(p1 - avg), abs(p2 - avg), abs(p3 - avg)) / avg > 0.03:
+        return None
+    neck = data["high"].values[t1:t3 + 1].max()
+    depth = neck - avg
+    if depth <= 0:
+        return None
+    formed_ts = str(data["ts"].iloc[t3]) if "ts" in data.columns else ""
+    return PatternResult(
+        pattern="triple_bottom",
+        confidence=round(min(1.0, depth / (lows.std() * 2)), 2),
+        direction="bullish",
+        key_levels=[round(avg, 2), round(neck, 2)],
+        formed_at=formed_ts,
+        price_target=round(neck + depth, 2),
+    )
+
+
+def detect_triple_top(data: pd.DataFrame) -> PatternResult | None:
+    highs = data["high"].values
+    peaks, _ = find_peaks(highs, distance=10, prominence=highs.std() * 0.2)
+    if len(peaks) < 3:
+        return None
+    t1, t2, t3 = peaks[-3], peaks[-2], peaks[-1]
+    p1, p2, p3 = highs[t1], highs[t2], highs[t3]
+    avg = (p1 + p2 + p3) / 3
+    if max(abs(p1 - avg), abs(p2 - avg), abs(p3 - avg)) / avg > 0.03:
+        return None
+    neck = data["low"].values[t1:t3 + 1].min()
+    depth = avg - neck
+    if depth <= 0:
+        return None
+    formed_ts = str(data["ts"].iloc[t3]) if "ts" in data.columns else ""
+    return PatternResult(
+        pattern="triple_top",
+        confidence=round(min(1.0, depth / (highs.std() * 2)), 2),
+        direction="bearish",
+        key_levels=[round(neck, 2), round(avg, 2)],
+        formed_at=formed_ts,
+        price_target=round(neck - depth, 2),
     )

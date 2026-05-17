@@ -6,6 +6,8 @@ def find_support_resistance(data: pd.DataFrame, prominence_factor: float = 0.3) 
     highs = data["high"].values
     lows  = data["low"].values
     std   = data["close"].std()
+    if std == 0:
+        std = 1.0  # fallback for flat data
 
     resistance_idx, res_props = find_peaks(highs, prominence=std * prominence_factor, distance=5)
     support_idx, sup_props    = find_peaks(-lows, prominence=std * prominence_factor, distance=5)

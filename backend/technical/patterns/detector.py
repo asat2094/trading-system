@@ -1,8 +1,11 @@
 import pandas as pd
 from technical.patterns.reversal import (
-    detect_double_bottom, detect_double_top, detect_head_and_shoulders, PatternResult,
+    detect_double_bottom, detect_double_top, detect_head_and_shoulders,
+    detect_triple_top, detect_triple_bottom, PatternResult,
 )
-from technical.patterns.continuation import detect_bull_flag
+from technical.patterns.continuation import (
+    detect_bull_flag, detect_triangle, detect_pennant, detect_wedge,
+)
 from technical.patterns.levels import find_support_resistance
 
 _DETECTORS = {
@@ -10,6 +13,11 @@ _DETECTORS = {
     "double_top":         detect_double_top,
     "head_and_shoulders": detect_head_and_shoulders,
     "bull_flag":          detect_bull_flag,
+    "triangle":           detect_triangle,
+    "pennant":            detect_pennant,
+    "wedge":              detect_wedge,
+    "triple_top":         detect_triple_top,
+    "triple_bottom":      detect_triple_bottom,
 }
 
 def detect_patterns(data: pd.DataFrame, patterns: list[str]) -> list[dict]:
