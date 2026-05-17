@@ -1,0 +1,93 @@
+services:
+  nginx:
+    image: nginx:1.26-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    command: gunicorn api.main:app -c gunicorn.conf.py
+    environment:
+      - POSTGRES_URL=${POSTGRES_URL}
+      - QUESTDB_URL=${QUESTDB_URL}
+      - REDIS_URL=${REDIS_URL}
+      - TEMPORAL_HOST=${TEMPORAL_HOST}
+      - TEMPORAL_NAMESPACE=${TEMPORAL_NAMESPACE}
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-6}
+      - PARQUET_BASE_PATH=/data/raw
+      - SCHEMA_VERSION=${SCHEMA_VERSION:-v1}
+      - SCANNER_DSL_VERSION=${SCANNER_DSL_VERSION:-1}
+      - ENABLE_LIVE_SIGNALS=${ENABLE_LIVE_SIGNALS:-true}
+      - ENABLE_LLM_CHAT=${ENABLE_LLM_CHAT:-true}
+      - SAFETY_GATE_AGENT_CODE=${SAFETY_GATE_AGENT_CODE:-true}
+    volumes:
+      - parquet_data:/data/raw
+    depends_on:
+      - postgres
+      - questdb
+      - redis
+
+  temporal-worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    command: python -m workers.main
+    environment:
+      - POSTGRES_URL=${POSTGRES_URL}
+      - QUESTDB_URL=${QUESTDB_URL}
+      - REDIS_URL=${REDIS_URL}
+      - TEMPORAL_HOST=${TEMPORAL_HOST}
+      - TEMPORAL_NAMESPACE=${TEMPORAL_NAMESPACE}
+      - PARQUET_BASE_PATH=/data/raw
+      - SAFETY_GATE_AGENT_CODE=${SAFETY_GATE_AGENT_CODE:-true}
+    volumes:
+      - parquet_data:/data/raw
+    depends_on:
+      - temporal
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: trading
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  questdb:
+    image: questdb/questdb:8.0.3
+    volumes:
+      - questdb_data:/root/.questdb
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+
+  temporal:
+    image: temporalio/auto-setup:1.24
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PWD=${POSTGRES_PASSWORD}
+      - POSTGRES_SEEDS=postgres
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  questdb_data:
+  redis_data:
+  parquet_data:
