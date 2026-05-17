@@ -6,9 +6,12 @@ import pyarrow.parquet as pq
 from pathlib import Path
 
 
+_ALLOWED_COLS = frozenset({"year", "month", "timeframe", "symbol", "ts"})
+
+
 @runtime_checkable
 class Storage(Protocol):
-    def read_parquet(self, path_pattern: str, **kwargs) -> pd.DataFrame: ...
+    def read_parquet(self, path_pattern: str, hive_partitioning: bool = False, filters: dict | None = None) -> pd.DataFrame: ...
     def write_parquet(self, df: pd.DataFrame, path: str) -> None: ...
     def full_path(self, relative: str) -> str: ...
 
@@ -25,7 +28,7 @@ class LocalStorage:
         full = self._base / path
         full.parent.mkdir(parents=True, exist_ok=True)
         table = pa.Table.from_pandas(df)
-        pq.write_table(table, full, compression="snappy")
+        pq.write_table(table, str(full), compression="snappy")
 
     def read_parquet(
         self,
@@ -34,14 +37,12 @@ class LocalStorage:
         filters: dict | None = None,
     ) -> pd.DataFrame:
         full_pattern = str(self._base / path_pattern)
-        conn = duckdb.connect()
 
         # Build base query with parameterized path
-        hive_flag = "true" if hive_partitioning else "false"
+        hive_flag = "true" if bool(hive_partitioning) else "false"
         base_sql = f"SELECT * FROM read_parquet($path, hive_partitioning={hive_flag})"
 
         if filters:
-            _ALLOWED_COLS = frozenset({"year", "month", "timeframe", "symbol", "ts"})
             invalid = set(filters.keys()) - _ALLOWED_COLS
             if invalid:
                 raise ValueError(f"Unknown filter columns: {invalid}")
@@ -53,7 +54,8 @@ class LocalStorage:
             params = {"path": full_pattern}
             sql = base_sql
 
-        return conn.execute(sql, params).df()
+        with duckdb.connect() as conn:
+            return conn.execute(sql, params).df()
 
 
 class S3Storage:
