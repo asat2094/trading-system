@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "/Users/ankitatiwari/.venvs/crg/bin/code-review-graph",
+      "args": [
+        "serve"
+      ],
+      "cwd": "/Users/ankitatiwari/Desktop/claude-playground/trading-system",
+      "type": "stdio"
+    }
+  }
+}
