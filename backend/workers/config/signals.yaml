@@ -1,0 +1,66 @@
+signals:
+  - name: bearish_engulfing_strong
+    category: entry
+    direction: bearish
+    timeframes: [15min, 1h, 1d]
+    conditions:
+      - type: candlestick_pattern
+        pattern: bearish_engulfing
+      - type: volume_confirmation
+        min_volume_ratio: 1.5
+      - type: trend_context
+        trend: up
+    severity: high
+    display:
+      color: "#f23645"
+      icon: "▼"
+      strength_score: 4
+
+  - name: rsi_oversold_uptrend
+    category: entry
+    direction: bullish
+    timeframes: [1h, 1d]
+    conditions:
+      - type: indicator
+        indicator: rsi
+        operator: lt
+        value: 30
+      - type: trend_context
+        trend: up
+    severity: medium
+    display:
+      color: "#089981"
+      icon: "▲"
+      strength_score: 3
+
+  - name: ema_crossover_bullish
+    category: entry
+    direction: bullish
+    timeframes: [1d]
+    conditions:
+      - type: indicator
+        indicator: ema_20_crosses_ema_50
+        operator: eq
+        value: "cross_above"
+    severity: medium
+    display:
+      color: "#089981"
+      icon: "✕"
+      strength_score: 3
+
+  - name: breakout_high_volume
+    category: alert
+    direction: any
+    timeframes: [15min, 1h]
+    conditions:
+      - type: indicator
+        indicator: price_vs_resistance
+        operator: gt
+        value: 1.0
+      - type: volume_confirmation
+        min_volume_ratio: 2.0
+    severity: high
+    display:
+      color: "#f5a623"
+      icon: "◉"
+      strength_score: 5
