@@ -1,6 +1,7 @@
 from datetime import date
 from temporalio import activity
 from core.logging import get_logger
+from core.metrics import ingestion_rows, ingestion_failures
 from core.storage import get_storage
 from data.sources.github_eod_source import fetch_github_eod
 
@@ -15,7 +16,11 @@ async def activity_fn(date_str: str | None = None) -> dict:
 
     log.info("fetch_github_eod_start", date=date_str)
 
-    df = await asyncio.get_event_loop().run_in_executor(None, fetch_github_eod, date_str)
+    try:
+        df = await asyncio.get_event_loop().run_in_executor(None, fetch_github_eod, date_str)
+    except Exception:
+        ingestion_failures.labels(source="github_eod").inc()
+        raise
     if df.empty:
         log.warning("fetch_github_eod_empty", date=date_str)
         return {"rows": 0, "date": date_str}
@@ -26,6 +31,7 @@ async def activity_fn(date_str: str | None = None) -> dict:
     await asyncio.get_event_loop().run_in_executor(None, storage.write_parquet, df, path)
 
     rows_written = await _write_questdb(df, "ohlcv_daily")
+    ingestion_rows.labels(source="github_eod", timeframe="1d").inc(rows_written)
     log.info("fetch_github_eod_complete", date=date_str, rows=rows_written)
     return {"rows": rows_written, "date": date_str}
 

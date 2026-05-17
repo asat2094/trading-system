@@ -1,4 +1,5 @@
 from fastapi import FastAPI, WebSocket
+from prometheus_fastapi_instrumentator import Instrumentator
 from api.middleware import TraceIdMiddleware
 from api.routers import auth, technical, scanner, admin
 from api.signals_ws import websocket_endpoint
@@ -9,6 +10,7 @@ def create_app() -> FastAPI:
     setup_logging()
     app = FastAPI(title="Trading System", version="0.1.0")
     app.add_middleware(TraceIdMiddleware)
+    Instrumentator().instrument(app).expose(app)
 
     app.include_router(auth.router)
     app.include_router(technical.router)

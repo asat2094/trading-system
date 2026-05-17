@@ -25,3 +25,19 @@ def setup_logging() -> None:
 
 def get_logger(name: str):
     return structlog.get_logger(name)
+
+
+def setup_tracing() -> None:
+    """Enable OpenTelemetry/Jaeger tracing when OTEL_ENABLED=true."""
+    import os
+    if os.getenv("OTEL_ENABLED", "false").lower() != "true":
+        return
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    provider = TracerProvider()
+    exporter = JaegerExporter(agent_host_name="localhost", agent_port=6831)
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
