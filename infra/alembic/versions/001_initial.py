@@ -29,16 +29,16 @@ def upgrade() -> None:
         sa.Column("sector", sa.Text),
         sa.Column("industry", sa.Text),
         sa.Column("market_cap", sa.BigInteger),
-        sa.Column("updated_at", TIMESTAMPTZ, server_default=sa.func.now()),
+        sa.Column("created_at", TIMESTAMPTZ, server_default=sa.func.now()),
         sa.CheckConstraint("exchange IN ('NSE','BSE')", name="stocks_exchange_check"),
     )
 
     op.create_table(
         "stock_attributes",
-        sa.Column("symbol", sa.Text, sa.ForeignKey("stocks.symbol"), nullable=False),
+        sa.Column("symbol", sa.Text, sa.ForeignKey("stocks.symbol", ondelete="CASCADE"), nullable=False),
         sa.Column("group_name", sa.Text, nullable=False),
         sa.Column("attributes", JSONB, nullable=False),
-        sa.Column("updated_at", TIMESTAMPTZ, server_default=sa.func.now()),
+        sa.Column("created_at", TIMESTAMPTZ, server_default=sa.func.now()),
         sa.PrimaryKeyConstraint("symbol", "group_name"),
     )
     op.execute("CREATE INDEX idx_stock_attributes_gin ON stock_attributes USING GIN (attributes)")
@@ -57,13 +57,14 @@ def upgrade() -> None:
 
     op.create_table(
         "trading_calendar",
-        sa.Column("date", sa.Date, primary_key=True),
+        sa.Column("date", sa.Date, nullable=False),
         sa.Column("exchange", sa.Text, nullable=False),
         sa.Column("is_trading", sa.Boolean, nullable=False),
         sa.Column("session_type", sa.Text),
         sa.Column("open_time", sa.Time),
         sa.Column("close_time", sa.Time),
         sa.Column("minutes", sa.Integer),
+        sa.PrimaryKeyConstraint("date", "exchange"),
     )
 
     op.create_table(
@@ -97,17 +98,17 @@ def upgrade() -> None:
     op.create_table(
         "market_events",
         sa.Column("id", UUID, primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("event_type", sa.Text, sa.ForeignKey("market_event_types.name"), nullable=False),
+        sa.Column("event_type", sa.Text, sa.ForeignKey("market_event_types.name", ondelete="RESTRICT"), nullable=False),
         sa.Column("collection_label", sa.Text, nullable=False, server_default="default"),
         sa.Column("date", sa.Date, nullable=False),
-        sa.Column("symbol", sa.Text, sa.ForeignKey("stocks.symbol")),
+        sa.Column("symbol", sa.Text, sa.ForeignKey("stocks.symbol", ondelete="SET NULL")),
         sa.Column("rank", sa.Integer),
         sa.Column("data", JSONB, nullable=False),
         sa.Column("captured_at", TIMESTAMPTZ, server_default=sa.func.now()),
     )
     op.execute(
         "CREATE UNIQUE INDEX idx_market_events_dedup ON market_events "
-        "(event_type, collection_label, date, symbol)"
+        "(event_type, collection_label, date, COALESCE(symbol, ''))"
     )
     op.create_index("idx_market_events_type", "market_events", ["event_type", sa.text("date DESC")])
     op.create_index(
