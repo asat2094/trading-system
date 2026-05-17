@@ -34,36 +34,47 @@ class LocalStorage:
         filters: dict | None = None,
     ) -> pd.DataFrame:
         full_pattern = str(self._base / path_pattern)
-        hp_flag = "true" if hive_partitioning else "false"
-        query = f"SELECT * FROM read_parquet('{full_pattern}', hive_partitioning={hp_flag})"
+        conn = duckdb.connect()
+
+        # Build base query with parameterized path
+        hive_flag = "true" if hive_partitioning else "false"
+        base_sql = f"SELECT * FROM read_parquet($path, hive_partitioning={hive_flag})"
 
         if filters:
-            clauses = " AND ".join(f"{k}={v!r}" for k, v in filters.items())
-            query += f" WHERE {clauses}"
+            _ALLOWED_COLS = frozenset({"year", "month", "timeframe", "symbol", "ts"})
+            invalid = set(filters.keys()) - _ALLOWED_COLS
+            if invalid:
+                raise ValueError(f"Unknown filter columns: {invalid}")
+            # Build WHERE clause — keys validated, values parameterized
+            where_parts = [f"{k} = ${k}" for k in filters]
+            params = {"path": full_pattern, **filters}
+            sql = base_sql + " WHERE " + " AND ".join(where_parts)
+        else:
+            params = {"path": full_pattern}
+            sql = base_sql
 
-        return duckdb.query(query).df()
+        return conn.execute(sql, params).df()
 
 
 class S3Storage:
     """Stub — activate by setting PARQUET_BASE_PATH=s3://bucket/raw."""
     def __init__(self, base_path: str):
-        self._base = base_path
+        self._base = base_path.rstrip("/")
 
     def full_path(self, relative: str) -> str:
         return f"{self._base}/{relative}"
 
     def write_parquet(self, df: pd.DataFrame, path: str) -> None:
-        conn = duckdb.connect()
-        conn.execute("INSTALL httpfs; LOAD httpfs;")
-        full = self.full_path(path)
-        table = pa.Table.from_pandas(df)
-        pq.write_table(table, full)
+        raise NotImplementedError(
+            "S3Storage.write_parquet not yet implemented. "
+            "Install duckdb httpfs and use DuckDB COPY ... TO 's3://...'"
+        )
 
     def read_parquet(self, path_pattern: str, **kwargs) -> pd.DataFrame:
-        conn = duckdb.connect()
-        conn.execute("INSTALL httpfs; LOAD httpfs;")
-        full_pattern = self.full_path(path_pattern)
-        return conn.query(f"SELECT * FROM read_parquet('{full_pattern}')").df()
+        raise NotImplementedError(
+            "S3Storage.read_parquet not yet implemented. "
+            "Configure httpfs credentials and use duckdb.connect() with LOAD httpfs."
+        )
 
 
 def get_storage() -> Storage:
