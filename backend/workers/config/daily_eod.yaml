@@ -1,0 +1,38 @@
+workflow: daily_eod
+schedule: "0 16 * * 1-5"  # 4 PM IST weekdays (UTC 10:30 AM)
+activities:
+  - activity: fetch_github_eod_data
+    timeout_minutes: 10
+    retry:
+      max_attempts: 3
+      initial_interval_s: 10
+      backoff_coefficient: 2.0
+    params:
+      repo: "jugaad-trader/nse-data"
+  - activity: fetch_yfinance_daily
+    timeout_minutes: 15
+    retry:
+      max_attempts: 2
+  - activity: aggregate_hourly
+    timeout_minutes: 20
+    retry:
+      max_attempts: 2
+  - activity: compute_indicators
+    timeout_minutes: 30
+    retry:
+      max_attempts: 2
+    params:
+      indicators: [rsi_14, macd, ema_20, bb_20, atr_14]
+      timeframes: [1d, 1h]
+  - activity: run_scanner_presets
+    timeout_minutes: 20
+    retry:
+      max_attempts: 2
+    params:
+      presets: [ema_crossover_bullish, rsi_oversold_uptrend, breakout_high_volume]
+  - activity: invalidate_cache
+    timeout_minutes: 2
+    params:
+      patterns: ["ta:v1:indicators:*", "ta:v1:scan:*"]
+  - activity: data_quality_check
+    timeout_minutes: 5
