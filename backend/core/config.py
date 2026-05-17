@@ -5,19 +5,19 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Databases
-    POSTGRES_URL: str = "postgresql+asyncpg://trading:trading@localhost:5432/trading"
-    QUESTDB_URL: str = "postgresql://admin:quest@localhost:8812/qdb"
-    REDIS_URL: str = "redis://localhost:6379"
+    POSTGRES_URL: str
+    QUESTDB_URL: str
+    REDIS_URL: str
 
     # Jobs
-    TEMPORAL_HOST: str = "localhost:7233"
+    TEMPORAL_HOST: str
     TEMPORAL_NAMESPACE: str = "trading"
 
     # Auth
     AUTH_PROVIDER: str = "local"
     ADMIN_USERNAME: str = ""
     ADMIN_PASSWORD_HASH: str = ""
-    JWT_SECRET: str = "dev-secret-change-in-production"
+    JWT_SECRET: str
     JWT_EXPIRY_HOURS: int = 24
 
     # LLM
