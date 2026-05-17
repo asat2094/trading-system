@@ -8,7 +8,7 @@ def test_settings_loads_defaults():
         QUESTDB_URL="postgresql://admin:quest@localhost:8812/qdb",
         REDIS_URL="redis://localhost:6379",
         TEMPORAL_HOST="localhost:7233",
-        JWT_SECRET="test-secret",
+        JWT_SECRET="x" * 32,
     )
     assert s.SCHEMA_VERSION == "v1"
     assert s.LLM_MODEL == "claude-sonnet-4-6"
@@ -29,6 +29,6 @@ def test_settings_env_override(monkeypatch):
     monkeypatch.setenv("QUESTDB_URL", "postgresql://admin:quest@localhost:8812/qdb")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379")
     monkeypatch.setenv("TEMPORAL_HOST", "localhost:7233")
-    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    monkeypatch.setenv("JWT_SECRET", "x" * 32)
     s = Settings(_env_file=None)
     assert s.SCHEMA_VERSION == "v2"

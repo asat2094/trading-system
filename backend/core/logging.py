@@ -16,6 +16,11 @@ def setup_logging() -> None:
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(),
     )
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(message)s",
+    )
 
 
 def get_logger(name: str):

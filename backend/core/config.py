@@ -1,3 +1,4 @@
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,12 +17,12 @@ class Settings(BaseSettings):
     # Auth
     AUTH_PROVIDER: str = "local"
     ADMIN_USERNAME: str = ""
-    ADMIN_PASSWORD_HASH: str = ""
+    ADMIN_PASSWORD_HASH: SecretStr = SecretStr("")
     JWT_SECRET: str
     JWT_EXPIRY_HOURS: int = 24
 
     # LLM
-    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_API_KEY: SecretStr = SecretStr("")
     LLM_MODEL: str = "claude-sonnet-4-6"
     LLM_PROMPT_VERSION: str = "v1"
     LLM_DAILY_TOKEN_BUDGET: int = 100_000
@@ -42,6 +43,13 @@ class Settings(BaseSettings):
 
     # Rate limits
     SHOONYA_MAX_CONCURRENT: int = 10
+
+    @field_validator("JWT_SECRET")
+    @classmethod
+    def jwt_secret_min_length(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError("JWT_SECRET must be at least 32 characters")
+        return v
 
 
 settings = Settings()
