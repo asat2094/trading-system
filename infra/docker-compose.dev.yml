@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: trading
+      POSTGRES_USER: trading
+      POSTGRES_PASSWORD: trading
+    ports: ["5432:5432"]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+
+  questdb:
+    image: questdb/questdb:8.0.3
+    ports:
+      - "9000:9000"
+      - "8812:8812"
+      - "9009:9009"
+    volumes: [questdb_data:/root/.questdb]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  temporal:
+    image: temporalio/auto-setup:1.24
+    ports: ["7233:7233"]
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=trading
+      - POSTGRES_PWD=trading
+      - POSTGRES_SEEDS=postgres
+    depends_on: [postgres]
+
+  temporal-ui:
+    image: temporalio/ui:2.28
+    ports: ["8080:8080"]
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+
+  prometheus:
+    image: prom/prometheus:v2.52
+    ports: ["9090:9090"]
+    volumes: [./prometheus.yml:/etc/prometheus/prometheus.yml]
+
+  grafana:
+    image: grafana/grafana:11.0
+    ports: ["3000:3000"]
+    volumes: [grafana_data:/var/lib/grafana]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+
+volumes:
+  postgres_data:
+  questdb_data:
+  grafana_data:
