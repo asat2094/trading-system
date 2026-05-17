@@ -27,6 +27,9 @@ def test_double_bottom_detected():
         assert 0 <= r["confidence"] <= 1
         assert "direction" in r
         assert r["direction"] in ("bullish", "bearish", "neutral")
+    # The synthetic double-bottom must be detected
+    assert len(results) >= 1
+    assert results[0]["pattern"] == "double_bottom"
 
 def test_detect_unknown_pattern_raises():
     df = make_double_bottom()
@@ -47,3 +50,17 @@ def test_patterns_sdk_detect():
     df = make_double_bottom(100)
     results = Patterns.detect(df, ["double_bottom", "head_and_shoulders"])
     assert isinstance(results, list)
+
+def test_double_top_not_detected_on_uptrend():
+    """Monotonically rising data should not produce a double-top."""
+    n = 100
+    t = np.arange(n)
+    price = 2800 + t * 5.0  # strict uptrend, no peaks
+    df = pd.DataFrame({
+        "ts": pd.date_range("2024-01-01", periods=n, freq="1min"),
+        "open": price - 2, "high": price + 2,
+        "low": price - 2, "close": price,
+        "volume": np.ones(n, dtype=int) * 100000,
+    })
+    results = detect_patterns(df, ["double_top"])
+    assert results == []

@@ -7,22 +7,22 @@ def find_support_resistance(data: pd.DataFrame, prominence_factor: float = 0.3) 
     lows  = data["low"].values
     std   = data["close"].std()
 
-    resistance_idx, _ = find_peaks(highs, prominence=std * prominence_factor, distance=5)
-    support_idx, _    = find_peaks(-lows, prominence=std * prominence_factor, distance=5)
+    resistance_idx, res_props = find_peaks(highs, prominence=std * prominence_factor, distance=5)
+    support_idx, sup_props    = find_peaks(-lows, prominence=std * prominence_factor, distance=5)
 
     levels = []
-    for idx in resistance_idx:
+    for i, idx in enumerate(resistance_idx):
         levels.append({
             "price": round(float(highs[idx]), 2),
             "type": "resistance",
-            "strength": min(5, int(highs[idx] / std)),
+            "strength": min(5, max(1, round(res_props["prominences"][i] / std))),
             "index": int(idx),
         })
-    for idx in support_idx:
+    for i, idx in enumerate(support_idx):
         levels.append({
             "price": round(float(lows[idx]), 2),
             "type": "support",
-            "strength": min(5, int(std / max(lows[idx], 1))),
+            "strength": min(5, max(1, round(sup_props["prominences"][i] / std))),
             "index": int(idx),
         })
     return sorted(levels, key=lambda x: x["price"])

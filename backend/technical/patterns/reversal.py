@@ -107,7 +107,7 @@ def detect_head_and_shoulders(data: pd.DataFrame) -> PatternResult | None:
     if abs(h_ls - h_rs) / h_ls > 0.05:
         return None
 
-    neckline = min(data["low"].values[ls:rs].min(), data["low"].values[rs:].min() if rs < len(data) - 1 else data["low"].values[rs])
+    neckline = data["low"].values[ls:rs + 1].min()
     depth = ((h_ls + h_rs) / 2) - neckline
     confidence = min(1.0, depth / highs.std())
     formed_ts = str(data["ts"].iloc[rs]) if "ts" in data.columns else ""
