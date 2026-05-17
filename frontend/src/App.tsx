@@ -3,6 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Login from "./pages/Login";
 import Screener from "./pages/Screener";
 import Chart from "./pages/Chart";
+import Sidebar from "./components/Layout/Sidebar";
+import ChatInterface from "./components/Chat/ChatInterface";
+import SignalFeedPanel from "./components/SignalFeed/SignalFeedPanel";
 import { isAuthenticated } from "./api/client";
 
 const queryClient = new QueryClient();
@@ -12,6 +15,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", height: "100vh", background: "#0d0d1a", color: "#d1d4dc" }}>
+      <Sidebar />
+      <div style={{ flex: 1, overflow: "auto" }}>{children}</div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -19,16 +31,16 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/screener" element={
-            <ProtectedRoute><Screener /></ProtectedRoute>
+            <ProtectedRoute><AppLayout><Screener /></AppLayout></ProtectedRoute>
           } />
           <Route path="/chart/:symbol" element={
-            <ProtectedRoute><Chart /></ProtectedRoute>
+            <ProtectedRoute><AppLayout><Chart /></AppLayout></ProtectedRoute>
           } />
           <Route path="/signals" element={
-            <ProtectedRoute><div>Signals (Task 23)</div></ProtectedRoute>
+            <ProtectedRoute><AppLayout><SignalFeedPanel /></AppLayout></ProtectedRoute>
           } />
           <Route path="/chat" element={
-            <ProtectedRoute><div>Chat (Task 23)</div></ProtectedRoute>
+            <ProtectedRoute><AppLayout><ChatInterface /></AppLayout></ProtectedRoute>
           } />
           <Route path="*" element={<Navigate to="/screener" replace />} />
         </Routes>
