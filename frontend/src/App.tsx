@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Login from "./pages/Login";
 import Screener from "./pages/Screener";
+import Chart from "./pages/Chart";
 import { isAuthenticated } from "./api/client";
 
 const queryClient = new QueryClient();
@@ -21,7 +22,7 @@ export default function App() {
             <ProtectedRoute><Screener /></ProtectedRoute>
           } />
           <Route path="/chart/:symbol" element={
-            <ProtectedRoute><div>Chart (Task 22)</div></ProtectedRoute>
+            <ProtectedRoute><Chart /></ProtectedRoute>
           } />
           <Route path="/signals" element={
             <ProtectedRoute><div>Signals (Task 23)</div></ProtectedRoute>
