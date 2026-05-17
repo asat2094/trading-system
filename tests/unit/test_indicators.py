@@ -59,3 +59,15 @@ def test_registry_list_includes_core_indicators():
     assert "macd" in indicators
     assert "ema" in indicators
     assert "vwap" in indicators
+
+def test_vwap_returns_series_aligned_with_input():
+    df = make_ohlcv(5)
+    result = Indicators.vwap(df)
+    assert len(result) == len(df)
+    assert result.dropna().shape[0] > 0
+
+def test_obv_returns_series():
+    df = make_ohlcv(5)
+    result = Indicators.obv(df)
+    assert isinstance(result, pd.Series)
+    assert len(result) == len(df)

@@ -11,5 +11,4 @@ async def fetch_intraday_1min(symbol: str, date_str: str) -> pd.DataFrame:
         log.error("shoonya_not_installed", msg="pip install NorenRestApiPy")
         return pd.DataFrame()
 
-    log.warning("shoonya_fetch_not_implemented", symbol=symbol, date=date_str)
-    return pd.DataFrame()
+    raise NotImplementedError("Shoonya intraday fetch not yet implemented")

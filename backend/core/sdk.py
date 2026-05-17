@@ -135,6 +135,10 @@ class Indicators:
     def atr(data: pd.DataFrame, period: int = 14) -> pd.Series:
         return ta.atr(data["high"], data["low"], data["close"], length=period)
 
+    @staticmethod
+    def obv(data: pd.DataFrame) -> pd.Series:
+        return ta.obv(data["close"], data["volume"])
+
 
 class Patterns:
     @staticmethod
