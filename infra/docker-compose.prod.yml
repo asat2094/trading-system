@@ -59,7 +59,12 @@ services:
       - parquet_data:/data/raw
     restart: unless-stopped
     depends_on:
-      - temporal
+      temporal:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   postgres:
     image: postgres:16
@@ -82,7 +87,7 @@ services:
       - questdb_data:/root/.questdb
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/status || exit 1"]
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.settimeout(3); s.connect(('localhost',9000)); s.close()\" || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
