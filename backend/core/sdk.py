@@ -152,6 +152,6 @@ class Patterns:
         return find_support_resistance(data)
 
     @staticmethod
-    def trend(data: pd.DataFrame, from_time: str | None = None, to_time: str | None = None) -> dict:
+    def trend(data: pd.DataFrame, window: int = 20):
         from technical.trend import analyze_trend
-        return analyze_trend(data, from_time, to_time)
+        return analyze_trend(data, window=window)
