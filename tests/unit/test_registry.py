@@ -1,6 +1,4 @@
 import pytest
-import pathlib
-from unittest.mock import MagicMock
 
 
 def test_registry_registers_valid_activity(tmp_path):
