@@ -130,3 +130,20 @@ class Indicators:
     def atr(data: pd.DataFrame, period: int = 14) -> pd.Series:
         import pandas_ta as ta
         return ta.atr(data["high"], data["low"], data["close"], length=period)
+
+
+class Patterns:
+    @staticmethod
+    def detect(data: pd.DataFrame, patterns: list[str]) -> list[dict]:
+        from technical.patterns.detector import detect_patterns
+        return detect_patterns(data, patterns)
+
+    @staticmethod
+    def support_resistance(data: pd.DataFrame) -> list[dict]:
+        from technical.patterns.levels import find_support_resistance
+        return find_support_resistance(data)
+
+    @staticmethod
+    def trend(data: pd.DataFrame, from_time: str | None = None, to_time: str | None = None) -> dict:
+        from technical.trend import analyze_trend
+        return analyze_trend(data, from_time, to_time)
