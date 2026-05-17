@@ -1,8 +1,8 @@
 from __future__ import annotations
 import asyncio
 from datetime import datetime, date
-from typing import Protocol, runtime_checkable
 import pandas as pd
+import pandas_ta as ta
 from core.config import settings
 from core.db import get_questdb_conn
 from core.storage import get_storage
@@ -55,12 +55,20 @@ class MarketData:
         self, symbol: str, tf: str, from_dt: datetime, to_dt: datetime
     ) -> pd.DataFrame:
         storage = get_storage()
-        pattern = f"timeframe={tf}/year={from_dt.year}/**/*.parquet"
-        df = storage.read_parquet(pattern, hive_partitioning=True)
-        if df.empty:
-            return df
-        df["ts"] = pd.to_datetime(df["ts"])
-        mask = (df["symbol"] == symbol) & (df["ts"] >= from_dt) & (df["ts"] <= to_dt)
+        years = range(from_dt.year, to_dt.year + 1)
+        frames = []
+        for y in years:
+            pattern = f"timeframe={tf}/year={y}/**/*.parquet"
+            df = storage.read_parquet(pattern, hive_partitioning=True)
+            if not df.empty:
+                frames.append(df)
+        if not frames:
+            return pd.DataFrame()
+        df = pd.concat(frames, ignore_index=True)
+        df["ts"] = pd.to_datetime(df["ts"]).dt.tz_localize(None)
+        from_naive = from_dt.replace(tzinfo=None)
+        to_naive = to_dt.replace(tzinfo=None)
+        mask = (df["symbol"] == symbol) & (df["ts"] >= from_naive) & (df["ts"] <= to_naive)
         return df[mask].copy()
 
     async def market_events(
@@ -69,7 +77,6 @@ class MarketData:
         date_: date,
         symbol: str | None = None,
         collection_label: str | None = None,
-        **filters,
     ) -> pd.DataFrame:
         from sqlalchemy import text
         from core.db import AsyncSessionLocal
@@ -91,6 +98,8 @@ class MarketData:
             return pd.DataFrame(rows, columns=result.keys())
 
     async def universe(self, filters: dict | None = None) -> list[str]:
+        if filters:
+            raise NotImplementedError("universe() filters not yet implemented")
         from sqlalchemy import text
         from core.db import AsyncSessionLocal
 
@@ -103,32 +112,27 @@ class MarketData:
 class Indicators:
     @staticmethod
     def rsi(data: pd.DataFrame, period: int = 14) -> pd.Series:
-        import pandas_ta as ta
         return ta.rsi(data["close"], length=period)
 
     @staticmethod
     def macd(data: pd.DataFrame) -> pd.DataFrame:
-        import pandas_ta as ta
         return ta.macd(data["close"])
 
     @staticmethod
     def ema(data: pd.DataFrame, period: int) -> pd.Series:
-        import pandas_ta as ta
         return ta.ema(data["close"], length=period)
 
     @staticmethod
     def vwap(data: pd.DataFrame) -> pd.Series:
-        import pandas_ta as ta
-        return ta.vwap(data["high"], data["low"], data["close"], data["volume"])
+        df = data.set_index(pd.to_datetime(data["ts"])) if "ts" in data.columns else data
+        return ta.vwap(df["high"], df["low"], df["close"], df["volume"])
 
     @staticmethod
     def bollinger_bands(data: pd.DataFrame, period: int = 20, std: float = 2.0) -> pd.DataFrame:
-        import pandas_ta as ta
         return ta.bbands(data["close"], length=period, std=std)
 
     @staticmethod
     def atr(data: pd.DataFrame, period: int = 14) -> pd.Series:
-        import pandas_ta as ta
         return ta.atr(data["high"], data["low"], data["close"], length=period)
 
 
