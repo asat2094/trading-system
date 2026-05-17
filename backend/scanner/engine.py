@@ -1,6 +1,8 @@
 from __future__ import annotations
 import asyncio
+import concurrent.futures
 import pandas as pd
+from datetime import date, timedelta
 from core.logging import get_logger
 from scanner.dsl import build_dsl, SCANNER_DSL_VERSION
 
@@ -48,11 +50,38 @@ class Scanner:
     def to_dsl(self) -> dict:
         return build_dsl(self)
 
+    async def _fetch_ohlcv(self, symbol: str) -> pd.DataFrame:
+        from core.sdk import MarketData
+        md = MarketData()
+        to_dt = date.today().isoformat()
+        from_dt = (date.today() - timedelta(days=60)).isoformat()
+        return await md.ohlcv(symbol, "1d", from_dt, to_dt)
+
+    def _run_sync(self, coro):
+        try:
+            loop = asyncio.get_running_loop()
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(asyncio.run, coro).result()
+        except RuntimeError:
+            return asyncio.run(coro)
+
     def run(self, universe: list[str], max_symbols: int | None = None) -> list[dict]:
         symbols = universe[:max_symbols] if max_symbols is not None else universe
+        total = len(self._conditions)
         results = []
         for symbol in symbols:
-            results.append({"symbol": symbol, "conditions_met": len(self._conditions)})
+            if total == 0:
+                results.append({"symbol": symbol, "passed": True, "conditions_met": 0, "total_conditions": 0})
+            else:
+                try:
+                    df = self._run_sync(self._fetch_ohlcv(symbol))
+                except Exception as exc:
+                    log.warning("scanner_ohlcv_fetch_failed", symbol=symbol, error=str(exc))
+                    continue
+                met = sum(1 for fn in self._conditions if fn(df))
+                if met == total:
+                    results.append({"symbol": symbol, "passed": True, "conditions_met": met, "total_conditions": total})
+        log.info("scanner_run", symbol_count=len(symbols), result_count=len(results))
         return results
 
     def _fetch_symbols(self) -> list[str]:

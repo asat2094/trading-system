@@ -36,4 +36,12 @@ class MarketCapRefreshWorkflow:
 class TradingCalendarSyncWorkflow:
     @workflow.run
     async def run(self, year: int) -> None:
-        pass
+        log = get_logger(__name__)
+        log.info("trading_calendar_sync_start", year=year)
+        await workflow.execute_activity(
+            "sync_trading_calendar",
+            args=[year],
+            start_to_close_timeout=timedelta(minutes=10),
+            retry_policy=RetryPolicy(maximum_attempts=3),
+        )
+        log.info("trading_calendar_sync_complete", year=year)

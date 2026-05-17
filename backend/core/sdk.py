@@ -98,13 +98,28 @@ class MarketData:
             return pd.DataFrame(rows, columns=result.keys())
 
     async def universe(self, filters: dict | None = None) -> list[str]:
-        if filters:
-            raise NotImplementedError("universe() filters not yet implemented")
         from sqlalchemy import text
         from core.db import AsyncSessionLocal
 
+        where_clauses = []
+        params: dict = {}
+
+        if filters:
+            allowed = {"exchange", "sector", "industry"}
+            for i, (key, value) in enumerate(filters.items()):
+                if key not in allowed:
+                    continue  # silently skip unknown filter keys
+                param_name = f"f{i}"
+                where_clauses.append(f"{key} = :{param_name}")
+                params[param_name] = value
+
+        query = "SELECT symbol FROM stocks"
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+        query += " ORDER BY symbol"
+
         async with AsyncSessionLocal() as session:
-            result = await session.execute(text("SELECT symbol FROM stocks ORDER BY symbol"))
+            result = await session.execute(text(query), params)
             symbols = [r[0] for r in result.fetchall()]
         return symbols
 
