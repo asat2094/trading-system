@@ -1,3 +1,4 @@
+import io
 import httpx
 import pandas as pd
 from core.logging import get_logger
@@ -17,7 +18,7 @@ def fetch_github_eod(date_str: str) -> pd.DataFrame:
         log.error("github_eod_fetch_failed", date=date_str, url=url, error=str(exc))
         return pd.DataFrame()
 
-    df = pd.read_csv(pd.io.common.StringIO(resp.text))
+    df = pd.read_csv(io.StringIO(resp.text))
     df.columns = [c.strip() for c in df.columns]
     col_map = {
         "Symbol": "symbol", "Date": "ts",

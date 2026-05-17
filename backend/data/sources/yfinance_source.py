@@ -20,7 +20,7 @@ def fetch_daily_ohlcv(ticker: str, start: str, end: str) -> pd.DataFrame:
             df = df.reset_index()
             # Handle MultiIndex columns from newer yfinance versions
             if isinstance(df.columns, pd.MultiIndex):
-                df.columns = [col[0] if col[1] == "" else col[0] for col in df.columns]
+                df.columns = [col[0] for col in df.columns]
             return pd.DataFrame({
                 "ts": pd.to_datetime(df["Date"]),
                 "symbol": symbol,
@@ -33,9 +33,10 @@ def fetch_daily_ohlcv(ticker: str, start: str, end: str) -> pd.DataFrame:
             })
         except Exception as exc:
             last_exc = exc
-            wait = _BACKOFF_BASE * (2 ** attempt)
-            log.warning("yfinance_retry", ticker=ticker, attempt=attempt + 1, wait_s=wait, error=str(exc))
-            time.sleep(min(wait, 30))
+            if attempt < _MAX_ATTEMPTS - 1:
+                wait = _BACKOFF_BASE * (2 ** attempt)
+                log.warning("yfinance_retry", ticker=ticker, attempt=attempt + 1, wait_s=wait, error=str(exc))
+                time.sleep(min(wait, 30))
 
     log.error("yfinance_failed", ticker=ticker, error=str(last_exc))
     return pd.DataFrame()

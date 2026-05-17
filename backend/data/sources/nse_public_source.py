@@ -14,7 +14,12 @@ _PRE_OPEN_MARKET = "https://www.nseindia.com/api/market-turn-overs?key=pre_open_
 
 def fetch_preopen_gainers(top_n: int = 20) -> pd.DataFrame:
     with httpx.Client(headers=_HEADERS, follow_redirects=True) as client:
-        client.get("https://www.nseindia.com", timeout=10)
+        try:
+            bootstrap = client.get("https://www.nseindia.com", timeout=10)
+            bootstrap.raise_for_status()
+        except Exception as exc:
+            log.error("nse_bootstrap_failed", error=str(exc))
+            return pd.DataFrame()
         try:
             resp = client.get(_PRE_OPEN_MARKET, timeout=15)
             resp.raise_for_status()

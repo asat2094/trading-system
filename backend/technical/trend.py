@@ -42,15 +42,11 @@ def analyze_trend(
 
     fitted = intercept + slope * x
 
-    # Measure accuracy as the proportion of bars that are in the direction of the trend
-    if len(close) > 1:
-        close_diff = np.diff(close)
-        if direction == "up":
-            accuracy = float(np.mean(close_diff > 0))
-        elif direction == "down":
-            accuracy = float(np.mean(close_diff < 0))
-        else:
-            accuracy = 0.5
+    # Measure accuracy as the proportion of bars where close is on the correct side of the fitted regression line
+    if direction == "up":
+        accuracy = float(np.mean(close <= fitted))
+    elif direction == "down":
+        accuracy = float(np.mean(close >= fitted))
     else:
         accuracy = 0.5
 

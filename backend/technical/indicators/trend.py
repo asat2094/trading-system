@@ -15,4 +15,4 @@ def supertrend(data: pd.DataFrame, period: int = 10, multiplier: float = 3.0) ->
 
 def ichimoku(data: pd.DataFrame) -> pd.DataFrame:
     ich, span = ta.ichimoku(data["high"], data["low"], data["close"])
-    return ich
+    return pd.concat([ich, span], axis=1)

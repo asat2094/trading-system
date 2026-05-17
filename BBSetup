@@ -1,0 +1,76 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//@version=6
+indicator("Multi-Band Trend System", overlay = true, shorttitle = "4 BB + Trend")
+
+// --- Inputs ---
+length       = input.int(20, "Channel/BB Length", minval = 1, tooltip = "Length for all EMA, WMA, and Bollinger calculations.")
+maLength     = input.int(20, "Trend MA Length", minval = 1, tooltip = "Length for the internal 20MA trend calculation.")
+strongSlope  = input.float(1.5, "Strong Trend Multiplier", minval = 0.1, tooltip = "Multiplier of the average move to define a 'strong' trend.")
+
+// --- Core Calculations ---
+// 1. EMA/WMA Bands (The "Green" and "Red" Zones)
+emaHigh     = ta.ema(high, length)
+wmaHigh     = ta.wma(high, length)
+higherGreen = math.max(emaHigh, wmaHigh)
+lowerGreen  = math.min(emaHigh, wmaHigh)
+
+emaLow    = ta.ema(low, length)
+wmaLow    = ta.wma(low, length)
+higherRed = math.max(emaLow, wmaLow)
+lowerRed  = math.min(emaLow, wmaLow)
+
+// 2. 4 Bollinger Bands (2 for Buy side, 2 for Sell side)
+// Buy Side BBs (Usually upper deviations)
+[_, bbBuyUpper1, _] = ta.bb(close, length, 1.0)
+[_, bbBuyUpper2, _] = ta.bb(close, length, 2.0)
+
+// Sell Side BBs (Usually lower deviations)
+[_, _, bbSellLower1] = ta.bb(close, length, 1.0)
+[_, _, bbSellLower2] = ta.bb(close, length, 2.0)
+
+// 3. Trend Logic (20MA Direction and Slope)
+ma20    = ta.sma(close, maLength)
+slope   = ma20 - ma20[1]
+isUp    = slope > 0
+isDown  = slope < 0
+
+// Define "Strong Signal"
+avgSlope    = ta.sma(math.abs(slope), 100)
+isStrongUp  = isUp and slope > (avgSlope * strongSlope)
+isStrongDn  = isDown and slope < -(avgSlope * strongSlope)
+
+// 4. Signal Logic
+// Buy: Price touching Green bands while trend is UP
+buyTrigger = isStrongUp ? low <= higherGreen : low <= lowerGreen
+buySignal  = isUp and buyTrigger
+
+// Sell: Price touching Red bands while trend is DOWN
+sellTrigger = isStrongDn ? high >= lowerRed : high >= higherRed
+sellSignal  = isDown and sellTrigger
+
+// --- Visuals ---
+// Trend MA
+plot(ma20, "Trend MA", color = isUp ? #089981 : isDown ? #f23645 : color.gray, linewidth = 2)
+
+// 4 Bollinger Bands
+plot(bbBuyUpper1, "BB Buy Upper 1", color = color.new(#089981, 70), style = plot.style_line)
+plot(bbBuyUpper2, "BB Buy Upper 2", color = color.new(#089981, 50), style = plot.style_line, linewidth = 2)
+plot(bbSellLower1, "BB Sell Lower 1", color = color.new(#f23645, 70), style = plot.style_line)
+plot(bbSellLower2, "BB Sell Lower 2", color = color.new(#f23645, 50), style = plot.style_line, linewidth = 2)
+
+// EMA/WMA "Green" Zones (Buy High/EMA, High/WMA)
+p_gh = plot(higherGreen, "Higher Green Band", color = color.new(#089981, 50))
+p_gl = plot(lowerGreen, "Lower Green Band", color = color.new(#089981, 50))
+fill(p_gh, p_gl, color.new(#089981, 80), "Buy Zone Fill")
+
+// EMA/WMA "Red" Zones (Sell Low/EMA, Low/WMA)
+p_rh = plot(higherRed, "Higher Red Band", color = color.new(#f23645, 50))
+p_rl = plot(lowerRed, "Lower Red Band", color = color.new(#f23645, 50))
+fill(p_rh, p_rl, color.new(#f23645, 80), "Sell Zone Fill")
+
+// Signals
+plotshape(buySignal and not buySignal[1], "Buy Signal", shape.triangleup, location.belowbar, #089981, size = size.small, text = "BUY")
+plotshape(sellSignal and not sellSignal[1], "Sell Signal", shape.triangledown, location.abovebar, #f23645, size = size.small, text = "SELL")
+
+// Highlight Strong Trend background
+bgcolor(isStrongUp ? color.new(#089981, 95) : isStrongDn ? color.new(#f23645, 95) : na)

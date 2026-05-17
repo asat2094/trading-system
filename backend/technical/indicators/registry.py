@@ -18,5 +18,7 @@ def get_indicator(name: str) -> Callable:
 def list_indicators() -> list[str]:
     return list(_REGISTRY.keys())
 
-def register_indicator(name: str, fn: Callable) -> None:
+def register_indicator(name: str, fn: Callable, overwrite: bool = False) -> None:
+    if name in _REGISTRY and not overwrite:
+        raise ValueError(f"Indicator {name!r} already registered. Pass overwrite=True to replace.")
     _REGISTRY[name] = fn

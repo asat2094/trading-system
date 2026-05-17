@@ -115,8 +115,8 @@ class Indicators:
         return ta.rsi(data["close"], length=period)
 
     @staticmethod
-    def macd(data: pd.DataFrame) -> pd.DataFrame:
-        return ta.macd(data["close"])
+    def macd(data: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9) -> pd.DataFrame:
+        return ta.macd(data["close"], fast=fast, slow=slow, signal=signal)
 
     @staticmethod
     def ema(data: pd.DataFrame, period: int) -> pd.Series:
