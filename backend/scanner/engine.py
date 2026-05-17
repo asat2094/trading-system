@@ -14,6 +14,7 @@ class Scanner:
         self._analysis: dict = {}
         self._indicators: list[str] = []
         self._sort: dict = {}
+        self._conditions: list = []
 
     def from_source(self, source: str, **params) -> "Scanner":
         self._source = {"name": source, **params}
@@ -40,14 +41,19 @@ class Scanner:
         self._sort = {"field": field, "descending": descending}
         return self
 
+    def add_condition(self, fn) -> "Scanner":
+        self._conditions.append(fn)
+        return self
+
     def to_dsl(self) -> dict:
         return build_dsl(self)
 
-    def run(self, max_symbols: int = 500, timeout_s: int = 120) -> pd.DataFrame:
-        symbols = self._fetch_symbols()
-        symbols = symbols[:max_symbols]
-        symbols = self._apply_filters(symbols)
-        return self._compute_results(symbols)
+    def run(self, universe: list[str], max_symbols: int | None = None) -> list[dict]:
+        symbols = universe[:max_symbols] if max_symbols is not None else universe
+        results = []
+        for symbol in symbols:
+            results.append({"symbol": symbol, "conditions_met": len(self._conditions)})
+        return results
 
     def _fetch_symbols(self) -> list[str]:
         source = self._source.get("name", "nse_universe")

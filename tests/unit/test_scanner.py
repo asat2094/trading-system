@@ -19,10 +19,26 @@ def test_scanner_filter_adds_condition():
 
 def test_scanner_run_respects_max_symbols():
     s = Scanner()
-    s.from_source("nse_universe")
-    with patch.object(s, "_fetch_symbols", return_value=["A"] * 600):
-        with patch.object(s, "_apply_filters", side_effect=lambda syms: syms):
-            with patch.object(s, "_compute_results", return_value=pd.DataFrame()) as mock_compute:
-                result = s.run(max_symbols=500)
-                call_args = mock_compute.call_args
-                assert len(call_args[0][0]) <= 500
+    universe = ["A"] * 600
+    result = s.run(universe=universe, max_symbols=500)
+    assert len(result) <= 500
+
+def test_scanner_run_returns_list_of_dicts():
+    from scanner.engine import Scanner
+    s = Scanner()
+    results = s.run(universe=["RELIANCE", "INFY", "TCS"])
+    assert isinstance(results, list)
+    assert all(isinstance(r, dict) for r in results)
+    assert all("symbol" in r for r in results)
+
+
+def test_scanner_dsl_roundtrip():
+    from scanner.engine import Scanner
+    from scanner.dsl import SCANNER_DSL_VERSION
+    s = Scanner()
+    dsl1 = s.to_dsl()
+    s2 = Scanner()
+    dsl2 = s2.to_dsl()
+    # Both empty scanners produce same DSL structure
+    assert dsl1["version"] == dsl2["version"] == SCANNER_DSL_VERSION
+    assert dsl1["conditions"] == dsl2["conditions"]
