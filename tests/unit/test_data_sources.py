@@ -45,10 +45,25 @@ def test_yfinance_retries_on_failure():
     assert not result.empty
 
 def test_github_eod_returns_dataframe():
-    mock_csv = "Symbol,Date,Open,High,Low,Close,Volume\nRELIANCE,2024-01-02,2800,2810,2795,2805,100000\n"
-    with patch("httpx.get") as mock_get:
-        mock_get.return_value.text = mock_csv
-        mock_get.return_value.raise_for_status = MagicMock()
+    import io, zipfile
+    # Build a real ZIP with NSE Bhavcopy CSV format
+    bhavcopy_csv = (
+        "SYMBOL,SERIES,OPEN,HIGH,LOW,CLOSE,LAST,PREVCLOSE,TOTTRDQTY,TOTTRDVAL,TIMESTAMP,TOTALTRADES,ISIN\n"
+        "RELIANCE,EQ,2800,2810,2795,2805,2805,2790,100000,280500000,02-JAN-2024,1234,INE002A01018\n"
+        "TATASTEEL,SM,100,101,99,100,100,98,50000,5000000,02-JAN-2024,500,INE081A01020\n"
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("cm02JAN2024bhav.csv", bhavcopy_csv)
+    zip_bytes = buf.getvalue()
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = zip_bytes
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
         result = fetch_github_eod("2024-01-02")
-    assert len(result) == 1
+
+    assert len(result) == 1  # only EQ series
     assert result["symbol"].iloc[0] == "RELIANCE"
