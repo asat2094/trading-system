@@ -1,6 +1,5 @@
 import pytest
 import pathlib
-import tempfile
 from unittest.mock import MagicMock
 
 
@@ -43,3 +42,12 @@ def test_registry_rejects_duplicate_names(tmp_path):
     from workers.registry import _collect_activities
     with pytest.raises(ValueError, match="Duplicate activity name"):
         _collect_activities(tmp_path)
+
+
+def test_registry_propagates_syntax_error(tmp_path):
+    bad_file = tmp_path / "bad_syntax.py"
+    bad_file.write_text("def broken(\n")  # invalid syntax
+
+    from workers.registry import _load_activity_from_path
+    with pytest.raises(SyntaxError):
+        _load_activity_from_path(bad_file)
