@@ -9,13 +9,13 @@ from core.logging import setup_logging
 from workers.registry import register_all
 from workers.workflows.backfill import BackfillWorkflow
 from workers.workflows.daily_eod import DailyEodWorkflow
-from workers.workflows.intraday import IntradayWorkflow
+from workers.workflows.intraday import Intraday1MinCollectorWorkflow
 from workers.workflows.maintenance import (
     MarketCapRefreshWorkflow,
     RetentionSweepWorkflow,
     TradingCalendarSyncWorkflow,
 )
-from workers.workflows.market_events import MarketEventsWorkflow
+from workers.workflows.market_events import MarketEventCollectorWorkflow
 
 
 async def main() -> None:
@@ -36,8 +36,8 @@ async def main() -> None:
         task_queue="trading-main",
         workflows=[
             DailyEodWorkflow,
-            IntradayWorkflow,
-            MarketEventsWorkflow,
+            Intraday1MinCollectorWorkflow,
+            MarketEventCollectorWorkflow,
             BackfillWorkflow,
             RetentionSweepWorkflow,
             MarketCapRefreshWorkflow,

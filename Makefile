@@ -28,18 +28,18 @@ install:
 # ── Database ───────────────────────────────────────────────────────────────
 migrate:
 	cd infra && DATABASE_URL=postgresql://trading:trading@localhost:5432/trading \
-		PYTHONPATH=../backend $(ALEMBIC) -c alembic.ini upgrade head
+		PYTHONPATH=../backend ../$(ALEMBIC) -c alembic.ini upgrade head
 
 seed:
 	@echo "Seeding NSE stocks + 2026 trading calendar..."
-	cd backend && PYTHONPATH=. $(PYTHON) scripts/seed.py
+	cd backend && PYTHONPATH=. ../$(PYTHON) scripts/seed.py
 
 # ── Backend ────────────────────────────────────────────────────────────────
 api:
-	cd backend && PYTHONPATH=. $(UVICORN) api.main:app --reload --host 0.0.0.0 --port 8000
+	cd backend && PYTHONPATH=. ../$(UVICORN) api.main:app --reload --host 0.0.0.0 --port 8000
 
 worker:
-	cd backend && PYTHONPATH=. $(PYTHON) -m workers.main
+	cd backend && PYTHONPATH=. ../$(PYTHON) -m workers.main
 
 # ── Frontend ───────────────────────────────────────────────────────────────
 frontend:
@@ -47,7 +47,7 @@ frontend:
 
 # ── Tests ──────────────────────────────────────────────────────────────────
 test:
-	cd backend && PYTHONPATH=. $(PYTEST) tests/unit/ -q
+	cd backend && PYTHONPATH=. ../$(PYTEST) tests/unit/ -q
 
 # ── Full dev start ─────────────────────────────────────────────────────────
 dev: up migrate seed

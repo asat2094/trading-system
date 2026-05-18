@@ -17,8 +17,9 @@ async def activity_fn(retention_days: int = 60) -> dict:
     storage = get_storage()
 
     try:
+        parquet_glob = storage.full_path("timeframe=1min/**/*.parquet")
         parquet_count = duckdb.query(
-            f"SELECT COUNT(*) FROM read_parquet('{storage.full_path(\"timeframe=1min/**/*.parquet\")}', "
+            f"SELECT COUNT(*) FROM read_parquet('{parquet_glob}', "
             f"hive_partitioning=true) WHERE ts::date < '{cutoff}'"
         ).fetchone()[0]
     except Exception as exc:

@@ -14,7 +14,17 @@ async def activity_fn(year: int) -> dict:
 
     log.info("sync_trading_calendar_start", year=year)
 
+    from datetime import time as dt_time
+
     df = await asyncio.get_event_loop().run_in_executor(None, fetch_trading_calendar, year)
+
+    def _to_time(val):
+        if val is None:
+            return None
+        if isinstance(val, dt_time):
+            return val
+        h, m, s = str(val).split(":")
+        return dt_time(int(h), int(m), int(s))
 
     async with AsyncSessionLocal() as session:
         upserted = 0
@@ -35,10 +45,10 @@ async def activity_fn(year: int) -> dict:
                 {
                     "date": row["date"],
                     "exchange": row["exchange"],
-                    "is_trading": row["is_trading"],
+                    "is_trading": bool(row["is_trading"]),
                     "session_type": row["session_type"],
-                    "open_time": row["open_time"],
-                    "close_time": row["close_time"],
+                    "open_time": _to_time(row["open_time"]) if row["is_trading"] else None,
+                    "close_time": _to_time(row["close_time"]) if row["is_trading"] else None,
                     "minutes": int(row["minutes"]),
                 },
             )
