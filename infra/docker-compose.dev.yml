@@ -6,7 +6,9 @@ services:
       POSTGRES_USER: trading
       POSTGRES_PASSWORD: trading
     ports: ["5432:5432"]
-    volumes: [postgres_data:/var/lib/postgresql/data]
+    volumes:
+      - ${TRADING_DATA_DIR:-~/.trading-system/data}/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
 
   questdb:
     image: questdb/questdb:8.0.3
@@ -14,11 +16,17 @@ services:
       - "9000:9000"
       - "8812:8812"
       - "9009:9009"
-    volumes: [questdb_data:/root/.questdb]
+    volumes:
+      - ${TRADING_DATA_DIR:-~/.trading-system/data}/questdb:/root/.questdb
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
+    command: redis-server --appendonly yes --appendfsync everysec
+    volumes:
+      - ${TRADING_DATA_DIR:-~/.trading-system/data}/redis:/data
+    restart: unless-stopped
 
   temporal:
     image: temporalio/auto-setup:latest
@@ -30,6 +38,7 @@ services:
       - POSTGRES_PWD=trading
       - POSTGRES_SEEDS=postgres
     depends_on: [postgres]
+    restart: unless-stopped
 
   temporal-ui:
     image: temporalio/ui:latest
@@ -37,24 +46,29 @@ services:
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
     depends_on: [temporal]
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
     ports: ["9090:9090"]
-    volumes: [./prometheus.yml:/etc/prometheus/prometheus.yml]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ${TRADING_DATA_DIR:-~/.trading-system/data}/prometheus:/prometheus
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:latest
     ports: ["3000:3000"]
-    volumes: [grafana_data:/var/lib/grafana]
+    volumes:
+      - ${TRADING_DATA_DIR:-~/.trading-system/data}/grafana:/var/lib/grafana
+    restart: unless-stopped
 
   jaeger:
     image: jaegertracing/all-in-one:latest
     ports:
       - "16686:16686"
       - "4317:4317"
+    restart: unless-stopped
 
-volumes:
-  postgres_data:
-  questdb_data:
-  grafana_data:
+# No named volumes — all data lives at ~/.trading-system/data/ on the host.
+# To wipe everything: rm -rf ~/.trading-system/data  (explicit, irreversible)

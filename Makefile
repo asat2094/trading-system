@@ -1,4 +1,4 @@
-.PHONY: up down api worker frontend seed migrate logs test dev install
+.PHONY: up down purge api worker frontend seed migrate logs test dev install
 
 PYTHON    := backend/.venv/bin/python
 UVICORN   := backend/.venv/bin/uvicorn
@@ -6,15 +6,36 @@ PYTEST    := backend/.venv/bin/pytest
 ALEMBIC   := backend/.venv/bin/alembic
 COMPOSE   := docker compose -f infra/docker-compose.dev.yml
 
+# Persistent data root — all stateful mounts live here.
+# Override via: make up TRADING_DATA_DIR=/your/path
+TRADING_DATA_DIR ?= $(HOME)/.trading-system/data
+export TRADING_DATA_DIR
+
+# Parquet files land on the host at the same root, not inside containers.
+PARQUET_BASE_PATH := $(TRADING_DATA_DIR)/parquet
+export PARQUET_BASE_PATH
+
 # ── Infrastructure ─────────────────────────────────────────────────────────
 up:
+	@mkdir -p $(TRADING_DATA_DIR)/postgres $(TRADING_DATA_DIR)/questdb \
+	           $(TRADING_DATA_DIR)/redis $(TRADING_DATA_DIR)/grafana \
+	           $(TRADING_DATA_DIR)/prometheus $(TRADING_DATA_DIR)/parquet
 	$(COMPOSE) up -d
 	@echo "Waiting for Postgres to be ready..."
 	@until $(COMPOSE) exec -T postgres pg_isready -U trading -d trading >/dev/null 2>&1; do sleep 1; done
-	@echo "All services up."
+	@echo "All services up. Data at: $(TRADING_DATA_DIR)"
 
 down:
-	$(COMPOSE) down -v
+	# Stops containers, keeps all data intact at $(TRADING_DATA_DIR)
+	$(COMPOSE) down
+
+purge:
+	# !! DESTRUCTIVE — wipes containers AND all persisted data !!
+	@echo "WARNING: This will permanently delete all trading data at $(TRADING_DATA_DIR)"
+	@read -p "Type YES to confirm: " ans && [ "$$ans" = "YES" ] || (echo "Aborted." && exit 1)
+	$(COMPOSE) down
+	rm -rf $(TRADING_DATA_DIR)
+	@echo "All data purged."
 
 logs:
 	$(COMPOSE) logs -f
@@ -36,10 +57,12 @@ seed:
 
 # ── Backend ────────────────────────────────────────────────────────────────
 api:
-	cd backend && PYTHONPATH=. ../$(UVICORN) api.main:app --reload --host 0.0.0.0 --port 8000
+	cd backend && PYTHONPATH=. PARQUET_BASE_PATH=$(PARQUET_BASE_PATH) \
+		../$(UVICORN) api.main:app --reload --host 0.0.0.0 --port 8000
 
 worker:
-	cd backend && PYTHONPATH=. ../$(PYTHON) -m workers.main
+	cd backend && PYTHONPATH=. PARQUET_BASE_PATH=$(PARQUET_BASE_PATH) \
+		../$(PYTHON) -m workers.main
 
 # ── Frontend ───────────────────────────────────────────────────────────────
 frontend:
@@ -58,6 +81,7 @@ dev: up migrate seed
 	@echo "  Temporal → http://localhost:8080"
 	@echo "  Grafana  → http://localhost:3000"
 	@echo "  Metrics  → http://localhost:9090"
+	@echo "  Data     → $(TRADING_DATA_DIR)"
 	@echo ""
 	@echo "Starting API + worker (Ctrl-C to stop)..."
 	@trap 'kill 0' INT; \
