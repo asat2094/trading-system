@@ -11,7 +11,7 @@ def _get_provider():
         from core.auth.local import LocalJWTProvider
         return LocalJWTProvider(
             username=settings.ADMIN_USERNAME,
-            password_hash=settings.ADMIN_PASSWORD_HASH,
+            password_hash=settings.ADMIN_PASSWORD_HASH.get_secret_value(),
             jwt_secret=settings.JWT_SECRET,
             jwt_expiry_hours=settings.JWT_EXPIRY_HOURS,
         )

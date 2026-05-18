@@ -1,10 +1,9 @@
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
+import bcrypt
 from jose import jwt, JWTError
-from passlib.context import CryptContext
 from core.auth.provider import User
 
-_PWD_CTX = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _ALGORITHM = "HS256"
 
 
@@ -18,7 +17,9 @@ class LocalJWTProvider:
     async def authenticate(self, credentials: dict) -> User | None:
         if credentials.get("username") != self.username:
             return None
-        if not _PWD_CTX.verify(credentials.get("password", ""), self.password_hash):
+        pw = credentials.get("password", "").encode()
+        hsh = self.password_hash.encode() if isinstance(self.password_hash, str) else self.password_hash
+        if not bcrypt.checkpw(pw, hsh):
             return None
         return User(username=self.username)
 
