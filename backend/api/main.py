@@ -1,4 +1,5 @@
 from fastapi import FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from api.middleware import TraceIdMiddleware
 from api.routers import auth, technical, scanner, admin
@@ -9,6 +10,13 @@ from core.logging import setup_logging
 def create_app() -> FastAPI:
     setup_logging()
     app = FastAPI(title="Trading System", version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://localhost:3000"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.add_middleware(TraceIdMiddleware)
     Instrumentator().instrument(app).expose(app)
 
