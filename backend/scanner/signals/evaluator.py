@@ -85,7 +85,7 @@ class SignalEvaluator:
             passed=result.passed,
             score=result.score,
             conditions_passed=conditions_passed,
-            conditions_total=len(signal.conditions),
+            conditions_total=len(tree.children),
             details=result.details,
             display=signal.display,
         )
