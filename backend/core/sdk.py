@@ -11,6 +11,45 @@ SCANNER_DSL_VERSION = settings.SCANNER_DSL_VERSION
 
 TF_TABLE = {"1min": "ohlcv_1min", "1h": "ohlcv_hourly", "1d": "ohlcv_daily"}
 
+# All supported timeframes and their pandas resample frequency strings.
+# None = no resampling needed (already 1min base).
+RESAMPLE_FREQ: dict[str, str | None] = {
+    "1min":  None,
+    "3min":  "3min",
+    "5min":  "5min",
+    "15min": "15min",
+    "30min": "30min",
+    "1h":    "1h",
+    "1d":    "1D",
+    "1w":    "1W",
+    "1M":    "1ME",
+}
+
+
+def resample_ohlcv(df: pd.DataFrame, tf: str) -> pd.DataFrame:
+    """Resample 1-min OHLCV dataframe to the requested timeframe."""
+    freq = RESAMPLE_FREQ.get(tf)
+    if freq is None or df.empty:
+        return df
+
+    symbol = df["symbol"].iloc[0] if "symbol" in df.columns else None
+    df = df.copy()
+    df["ts"] = pd.to_datetime(df["ts"])
+    df = df.set_index("ts")
+
+    agg = df.resample(freq, label="left").agg(
+        open=("open", "first"),
+        high=("high", "max"),
+        low=("low", "min"),
+        close=("close", "last"),
+        volume=("volume", "sum"),
+    ).dropna(subset=["open"])
+
+    agg = agg.reset_index()
+    if symbol is not None:
+        agg["symbol"] = symbol
+    return agg
+
 
 class MarketData:
     async def ohlcv(
@@ -21,19 +60,22 @@ class MarketData:
         to_dt: datetime,
         adjusted: bool = True,
     ) -> pd.DataFrame:
-        table = TF_TABLE.get(tf)
-        if table is None:
-            raise ValueError(f"Unknown timeframe {tf!r}. Use: {list(TF_TABLE)}")
+        if tf not in RESAMPLE_FREQ:
+            raise ValueError(f"Unknown timeframe {tf!r}. Use: {list(RESAMPLE_FREQ)}")
+
+        # Always fetch from 1min table (covers all aggregated timeframes)
+        base_table = "ohlcv_1min"
 
         # Try QuestDB hot layer first
         df = await asyncio.get_running_loop().run_in_executor(
-            None, self._query_questdb, table, symbol, from_dt, to_dt
+            None, self._query_questdb, base_table, symbol, from_dt, to_dt
         )
         if not df.empty:
-            return df
+            return resample_ohlcv(df, tf)
 
-        # Transparent fallback to DuckDB + Parquet
-        return self._query_parquet(symbol, tf, from_dt, to_dt)
+        # Transparent fallback to DuckDB + Parquet (always 1min base)
+        df = self._query_parquet(symbol, "1min", from_dt, to_dt)
+        return resample_ohlcv(df, tf)
 
     def _query_questdb(
         self, table: str, symbol: str, from_dt: datetime, to_dt: datetime
@@ -42,7 +84,7 @@ class MarketData:
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    f"SELECT * FROM {table} WHERE symbol=? AND ts BETWEEN ? AND ? ORDER BY ts",
+                    f"SELECT * FROM {table} WHERE symbol=%s AND ts BETWEEN %s AND %s ORDER BY ts",
                     (symbol, from_dt, to_dt),
                 )
                 rows = cur.fetchall()
@@ -170,3 +212,15 @@ class Patterns:
     def trend(data: pd.DataFrame, window: int = 20):
         from technical.trend import analyze_trend
         return analyze_trend(data, window=window)
+
+    @staticmethod
+    def detect_candlestick(data: pd.DataFrame, pattern: str) -> dict | None:
+        """Detect a candlestick pattern. Returns {"confidence": float, "direction": str} or None."""
+        from technical.patterns.candlestick import detect_candlestick
+        return detect_candlestick(data, pattern)
+
+
+def get_indicator_by_name(name: str):
+    """Return indicator function by name. Passthrough to technical.indicators.registry."""
+    from technical.indicators.registry import get_indicator
+    return get_indicator(name)
