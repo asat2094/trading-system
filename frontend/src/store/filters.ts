@@ -32,15 +32,28 @@ interface FiltersStore {
   reset: () => void;
 }
 
-function findGroup(node: ConditionGroup, id: string): ConditionGroup | null {
-  if (node.id === id) return node;
-  for (const child of node.children) {
-    if ("logic" in child) {
-      const found = findGroup(child as ConditionGroup, id);
-      if (found) return found;
-    }
+function addToGroup(node: ConditionGroup, groupId: string, leaf: ConditionLeaf): ConditionGroup {
+  if (node.id === groupId) {
+    return { ...node, children: [...node.children, leaf] };
   }
-  return null;
+  return {
+    ...node,
+    children: node.children.map((c) =>
+      "logic" in c ? addToGroup(c as ConditionGroup, groupId, leaf) : c
+    ),
+  };
+}
+
+function addGroupToParent(node: ConditionGroup, parentId: string, newGroup: ConditionGroup): ConditionGroup {
+  if (node.id === parentId) {
+    return { ...node, children: [...node.children, newGroup] };
+  }
+  return {
+    ...node,
+    children: node.children.map((c) =>
+      "logic" in c ? addGroupToParent(c as ConditionGroup, parentId, newGroup) : c
+    ),
+  };
 }
 
 function removeFromGroup(node: ConditionGroup, childId: string): ConditionGroup {
@@ -100,11 +113,7 @@ export const useFiltersStore = create<FiltersStore>((set, get) => ({
   addCondition: (groupId, leaf) =>
     set((s) => {
       if (!s.customConditions) return s;
-      const root = { ...s.customConditions };
-      const group = findGroup(root, groupId);
-      if (!group) return s;
-      group.children = [...group.children, leaf];
-      return { customConditions: root };
+      return { customConditions: addToGroup(s.customConditions, groupId, leaf) };
     }),
 
   removeCondition: (_groupId, childId) =>
@@ -116,11 +125,7 @@ export const useFiltersStore = create<FiltersStore>((set, get) => ({
   addGroup: (parentGroupId) =>
     set((s) => {
       if (!s.customConditions) return s;
-      const root = { ...s.customConditions };
-      const parent = findGroup(root, parentGroupId);
-      if (!parent) return s;
-      parent.children = [...parent.children, newGroup("AND")];
-      return { customConditions: root };
+      return { customConditions: addGroupToParent(s.customConditions, parentGroupId, newGroup("AND")) };
     }),
 
   updateCondition: (_groupId, updatedLeaf) =>
