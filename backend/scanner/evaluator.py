@@ -325,9 +325,9 @@ class ConditionEvaluator:
         prev_b, curr_b = combined["b"].iloc[-2], combined["b"].iloc[-1]
 
         if node.crossover == "above":
-            passed = prev_a <= prev_b and curr_a > curr_b
+            passed = bool(prev_a <= prev_b and curr_a > curr_b)
         else:
-            passed = prev_a >= prev_b and curr_a < curr_b
+            passed = bool(prev_a >= prev_b and curr_a < curr_b)
 
         return ConditionResult(
             passed=passed,
@@ -403,7 +403,7 @@ class ConditionEvaluator:
                                    details={"error": "zero_avg_volume"}, node_type="volume")
 
         ratio = last_volume / avg_volume
-        passed = ratio >= node.volume_ratio
+        passed = bool(ratio >= node.volume_ratio)
         score = min(1.0, (ratio - node.volume_ratio) / node.volume_ratio) if passed else 0.0
         return ConditionResult(
             passed=passed,
@@ -418,7 +418,7 @@ class ConditionEvaluator:
         df = await ctx.get(node.timeframe)
         from core.sdk import Patterns
         result = Patterns.trend(df, window=node.trend_window)
-        passed = result.direction == node.trend
+        passed = bool(result.direction == node.trend)
         score = result.strength if passed else 0.0
         return ConditionResult(
             passed=passed,
