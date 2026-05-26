@@ -1,5 +1,4 @@
 # backend/tests/unit/test_signal_models.py
-import pytest
 from scanner.signals.models import SignalCondition, SignalConfig
 
 
