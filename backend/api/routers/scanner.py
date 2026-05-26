@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from core.auth.middleware import get_current_user
 from core.auth.provider import User
 from core.logging import get_logger
-from scanner.engine import Scanner
+from scanner.engine import Scanner, TF_LOOKBACK_CAP
 from scanner.evaluator import ConditionNode, ConditionEvaluator, DataContext
 
 log = get_logger(__name__)
@@ -36,6 +36,22 @@ class EvaluateRequest(BaseModel):
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+def _sanitize(obj):
+    """Recursively convert numpy scalars to native Python types for JSON serialization."""
+    import numpy as np
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize(v) for v in obj]
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    return obj
+
+
 def _result_to_dict(scan_result) -> dict:
     """Convert ScanResult dataclass to JSON-serialisable dict."""
     signal_details = {}
@@ -45,7 +61,7 @@ def _result_to_dict(scan_result) -> dict:
             "score": sr.score,
             "conditions_passed": sr.conditions_passed,
             "conditions_total": sr.conditions_total,
-            "details": sr.details,
+            "details": _sanitize(sr.details),
             "display": sr.display,
         }
     return {
@@ -69,14 +85,15 @@ def _make_fetch_fn(lookback_days: int):
     from core.sdk import MarketData
     from datetime import datetime, timedelta
     md = MarketData()
-    TF_LOOKBACK_CAP = {
-        "1min": 5, "3min": 10, "5min": 15, "15min": 30,
-        "30min": 60, "1h": 120, "1d": lookback_days,
-        "1w": lookback_days, "1M": lookback_days,
-    }
+
+    # Create a copy with lookback_days substituted for daily/weekly/monthly timeframes
+    tf_lookback = TF_LOOKBACK_CAP.copy()
+    tf_lookback["1d"] = lookback_days
+    tf_lookback["1w"] = lookback_days
+    tf_lookback["1M"] = lookback_days
 
     async def fetch(symbol: str, tf: str):
-        cap = TF_LOOKBACK_CAP.get(tf, lookback_days)
+        cap = tf_lookback.get(tf, lookback_days)
         effective = min(lookback_days, cap)
         to_dt = datetime.now()
         from_dt = to_dt - timedelta(days=effective)
@@ -110,22 +127,6 @@ async def run_scan(req: ScanRequest, user: User = Depends(get_current_user)):
         "matched": len(results),
         "duration_ms": duration_ms,
     }
-
-
-def _sanitize(obj):
-    """Recursively convert numpy scalars to native Python types for JSON serialization."""
-    import numpy as np
-    if isinstance(obj, dict):
-        return {k: _sanitize(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_sanitize(v) for v in obj]
-    if isinstance(obj, np.bool_):
-        return bool(obj)
-    if isinstance(obj, (np.integer,)):
-        return int(obj)
-    if isinstance(obj, (np.floating,)):
-        return float(obj)
-    return obj
 
 
 @router.post("/evaluate")

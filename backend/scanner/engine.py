@@ -15,6 +15,18 @@ log = get_logger(__name__)
 
 SCANNER_MAX_CONCURRENT = 20
 
+TF_LOOKBACK_CAP = {
+    "1min":  5,
+    "3min":  10,
+    "5min":  15,
+    "15min": 30,
+    "30min": 60,
+    "1h":    120,
+    "1d":    None,  # Will be set by lookback_days parameter
+    "1w":    None,
+    "1M":    None,
+}
+
 
 # ── ScanResult ────────────────────────────────────────────────────────────────
 
@@ -105,20 +117,14 @@ class Scanner:
         from core.sdk import MarketData
         md = MarketData()
 
-        TF_LOOKBACK_CAP = {
-            "1min":  5,
-            "3min":  10,
-            "5min":  15,
-            "15min": 30,
-            "30min": 60,
-            "1h":    120,
-            "1d":    lookback_days,
-            "1w":    lookback_days,
-            "1M":    lookback_days,
-        }
+        # Create a copy with lookback_days substituted for daily/weekly/monthly timeframes
+        tf_lookback = TF_LOOKBACK_CAP.copy()
+        tf_lookback["1d"] = lookback_days
+        tf_lookback["1w"] = lookback_days
+        tf_lookback["1M"] = lookback_days
 
         async def fetch(symbol: str, tf: str):
-            cap = TF_LOOKBACK_CAP.get(tf, lookback_days)
+            cap = tf_lookback.get(tf, lookback_days)
             effective_days = min(lookback_days, cap)
             to_dt = datetime.now()
             from_dt = to_dt - timedelta(days=effective_days)
