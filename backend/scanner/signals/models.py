@@ -1,18 +1,28 @@
+# backend/scanner/signals/models.py
 from typing import Any, Literal
 from pydantic import BaseModel, field_validator
 
 
 class SignalCondition(BaseModel):
     type: Literal[
-        "candlestick_pattern", "volume_confirmation",
-        "trend_context", "indicator", "custom_activity",
+        "candlestick_pattern", "chart_pattern", "volume_confirmation",
+        "trend_context", "indicator", "crossover", "custom_activity",
     ]
     pattern: str | None = None
     indicator: str | None = None
     operator: str | None = None
     value: float | str | None = None
+    params: dict[str, Any] = {}                # indicator-specific kwargs
     min_volume_ratio: float | None = None
+    min_confidence: float | None = None        # for chart_pattern
     trend: str | None = None
+    timeframe: str | None = None               # per-condition TF override
+    # crossover-specific
+    indicator_a: str | None = None
+    indicator_b: str | None = None
+    params_a: dict[str, Any] = {}
+    params_b: dict[str, Any] = {}
+    crossover: str | None = None               # "above" | "below"
 
 
 class SignalDisplay(BaseModel):

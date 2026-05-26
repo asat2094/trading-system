@@ -38,10 +38,12 @@ signals:
     direction: bullish
     timeframes: [1d]
     conditions:
-      - type: indicator
-        indicator: ema_20_crosses_ema_50
-        operator: eq
-        value: "cross_above"
+      - type: crossover
+        indicator_a: ema
+        params_a: {period: 20}
+        indicator_b: ema
+        params_b: {period: 50}
+        crossover: above
     severity: medium
     display:
       color: "#089981"
