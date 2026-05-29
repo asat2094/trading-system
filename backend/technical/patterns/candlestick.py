@@ -139,6 +139,21 @@ def _detect_evening_star(df: pd.DataFrame) -> dict | None:
     return {"confidence": round(confidence, 4), "direction": "bearish"}
 
 
+def _detect_gravestone_doji(df: pd.DataFrame) -> dict | None:
+    if len(df) < 1:
+        return None
+    row = df.iloc[-1]
+    rng = row["high"] - row["low"]
+    if rng < 1e-9:
+        return None
+    body = _body(row) / rng
+    upper = _upper_shadow(row) / rng
+    lower = _lower_shadow(row) / rng
+    if body < 0.1 and upper > 0.6 and lower < 0.1:
+        return {"confidence": round(upper, 4), "direction": "bearish"}
+    return None
+
+
 _CANDLESTICK_DETECTORS: dict[str, callable] = {
     "bearish_engulfing": _detect_bearish_engulfing,
     "bullish_engulfing": _detect_bullish_engulfing,
@@ -147,6 +162,7 @@ _CANDLESTICK_DETECTORS: dict[str, callable] = {
     "doji":              _detect_doji,
     "morning_star":      _detect_morning_star,
     "evening_star":      _detect_evening_star,
+    "gravestone_doji":   _detect_gravestone_doji,
 }
 
 

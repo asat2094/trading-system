@@ -170,3 +170,53 @@ def test_unknown_pattern_raises():
     df = df_from_bars(make_bar(100, 105, 95, 102))
     with pytest.raises(ValueError, match="Unknown candlestick pattern"):
         detect_candlestick(df, "nonexistent_pattern")
+
+
+# ── gravestone_doji ───────────────────────────────────────────────────────────
+
+def test_gravestone_doji_detected():
+    # Long upper wick, tiny body at low, no lower wick
+    # open=99, close=100, high=120, low=98 → body=1/22≈0.045, upper=20/22≈0.91, lower=2/22≈0.09
+    df = df_from_bars(make_bar(99, 120, 98, 100))
+    result = detect_candlestick(df, "gravestone_doji")
+    assert result is not None
+    assert result["direction"] == "bearish"
+    assert result["confidence"] >= 0.6
+
+
+def test_gravestone_doji_high_confidence():
+    # Perfect gravestone: open=close=low, all wick above
+    df = df_from_bars(make_bar(100, 130, 100, 100))
+    result = detect_candlestick(df, "gravestone_doji")
+    assert result is not None
+    assert result["confidence"] > 0.9
+
+
+def test_gravestone_doji_not_detected_large_body():
+    # Large body — fails body < 0.1 check
+    df = df_from_bars(make_bar(100, 130, 99, 120))
+    result = detect_candlestick(df, "gravestone_doji")
+    assert result is None
+
+
+def test_gravestone_doji_not_detected_lower_wick():
+    # Has significant lower wick — fails lower < 0.1 check
+    df = df_from_bars(make_bar(100, 130, 90, 101))
+    result = detect_candlestick(df, "gravestone_doji")
+    assert result is None
+
+
+def test_gravestone_doji_not_detected_small_upper_wick():
+    # Small upper wick — fails upper > 0.6 check
+    # body=99→100=1, range=103-98=5, upper=103-100=3/5=0.6 (just at boundary)
+    df = df_from_bars(make_bar(99, 103, 98, 100))
+    result = detect_candlestick(df, "gravestone_doji")
+    # upper_wick/range = 3/5 = 0.6, exactly at boundary — borderline, assert is None for strict >0.6
+    assert result is None
+
+
+def test_gravestone_doji_not_detected_flat_candle():
+    # Zero range — should not crash, should return None
+    df = df_from_bars(make_bar(100, 100, 100, 100))
+    result = detect_candlestick(df, "gravestone_doji")
+    assert result is None
