@@ -28,3 +28,33 @@ def find_support_resistance(data: pd.DataFrame, prominence_factor: float = 0.3) 
             "index": int(idx),
         })
     return sorted(levels, key=lambda x: x["price"])
+
+
+def pivot_highs(df: pd.DataFrame, left: int = 5, right: int = 5) -> list[int]:
+    """
+    Return bar indices where high[i] is strictly greater than or equal to
+    all highs in the [i-left, i-1] and [i+1, i+right] windows.
+    """
+    highs = df["high"].values
+    n = len(highs)
+    result = []
+    for i in range(left, n - right):
+        window = list(highs[i - left:i]) + list(highs[i + 1:i + right + 1])
+        if len(window) == left + right and highs[i] >= max(window):
+            result.append(i)
+    return result
+
+
+def pivot_lows(df: pd.DataFrame, left: int = 5, right: int = 5) -> list[int]:
+    """
+    Return bar indices where low[i] is less than or equal to
+    all lows in the [i-left, i-1] and [i+1, i+right] windows.
+    """
+    lows = df["low"].values
+    n = len(lows)
+    result = []
+    for i in range(left, n - right):
+        window = list(lows[i - left:i]) + list(lows[i + 1:i + right + 1])
+        if len(window) == left + right and lows[i] <= min(window):
+            result.append(i)
+    return result
