@@ -176,7 +176,7 @@ def test_unknown_pattern_raises():
 
 def test_gravestone_doji_detected():
     # Long upper wick, tiny body at low, no lower wick
-    # open=99, close=100, high=120, low=98 → body=1/22≈0.045, upper=20/22≈0.91, lower=2/22≈0.09
+    # open=99, close=100, high=120, low=98 → body=1/22≈0.045, upper=20/22≈0.91, lower=1/22≈0.045
     df = df_from_bars(make_bar(99, 120, 98, 100))
     result = detect_candlestick(df, "gravestone_doji")
     assert result is not None
