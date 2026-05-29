@@ -95,7 +95,7 @@ export default function BacktestPanel({ symbol, timeframe, onRunComplete }: Prop
         } else if (data.status === "failed") {
           stopPolling();
           setStatus("failed");
-          setError(data.error || "Run failed");
+          setError(data.notes || data.error || "Run failed");
           setRunning(false);
         } else {
           setStatus(data.status);
