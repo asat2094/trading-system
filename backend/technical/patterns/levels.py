@@ -32,7 +32,7 @@ def find_support_resistance(data: pd.DataFrame, prominence_factor: float = 0.3) 
 
 def pivot_highs(df: pd.DataFrame, left: int = 5, right: int = 5) -> list[int]:
     """
-    Return bar indices where high[i] is strictly greater than or equal to
+    Return bar indices where high[i] is greater than or equal to
     all highs in the [i-left, i-1] and [i+1, i+right] windows.
     """
     highs = df["high"].values
