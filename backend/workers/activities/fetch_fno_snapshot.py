@@ -155,7 +155,7 @@ def run_fno_snapshot(symbol: str = "NIFTY", strikes: int = 10) -> dict:
 
     try:
         # --- call 1: spot ---
-        spot_data = _FnoMCPClient.call_tool(mc, "get_ltp", {"instruments": [NSE_NIFTY]})
+        spot_data = mc.call_tool("get_ltp", {"instruments": [NSE_NIFTY]})
         spot = float((spot_data.get(NSE_NIFTY) or {}).get("last_price", 0))
         if spot <= 0:
             raise RuntimeError(f"Could not fetch NIFTY spot. Response: {spot_data}")
@@ -169,73 +169,73 @@ def run_fno_snapshot(symbol: str = "NIFTY", strikes: int = 10) -> dict:
         ]
 
         # --- call 2: batch quotes (OI + OHLC + LTP for all ~42 instruments) ---
-        quotes = _FnoMCPClient.call_tool(mc, "get_quotes", {"instruments": instruments})
+        quotes = mc.call_tool("get_quotes", {"instruments": instruments})
 
+        # --- process quotes + compute per-strike metrics ---
+        bp           = f"fno:baseline:{symbol}:{expiry}"
+        strikes_data: list[dict] = []
+        total_ce_oi = total_pe_oi = total_ce_delta = total_pe_delta = 0.0
+
+        for s in strike_list:
+            row: dict[str, Any] = {"strike": s}
+            for typ in ("CE", "PE"):
+                sym  = f"NFO:{prefix}{s}{typ}"
+                q    = quotes.get(sym) or {}
+                if not q:
+                    row[typ.lower()] = None
+                    continue
+
+                ltp   = float(q.get("last_price", 0))
+                oi    = float(q.get("oi", 0))
+                ohlc  = q.get("ohlc") or {}
+                open_ = float(ohlc.get("open", 0))
+                high  = float(ohlc.get("high", 0))
+
+                # Delta OI via Redis baseline
+                b_key = f"{bp}:{s}:{typ}"
+                raw   = rdb.get(b_key)
+                if raw is None:
+                    rdb.setex(b_key, _secs_to_ist_midnight(), str(oi))
+                    delta = 0.0
+                else:
+                    delta = oi - float(raw)
+
+                oh     = _is_oh(open_, high)
+                oh_hit = oh and _is_oh_hit(open_, ltp)
+
+                side = {
+                    "ltp": ltp, "oi": oi, "delta_oi": delta,
+                    "open": open_, "high": high,
+                    "is_oh": oh, "is_oh_hit": oh_hit,
+                }
+
+                if typ == "CE":
+                    total_ce_oi    += oi
+                    total_ce_delta += delta
+                else:
+                    total_pe_oi    += oi
+                    total_pe_delta += delta
+
+                row[typ.lower()] = side
+            strikes_data.append(row)
+
+        ratios = _compute_ratios(total_ce_oi, total_pe_oi, total_ce_delta, total_pe_delta)
+        result = {
+            "symbol":      symbol,
+            "spot":        spot,
+            "expiry":      str(expiry),
+            "atm_strike":  atm,
+            **ratios,
+            "total_ce_oi": total_ce_oi,
+            "total_pe_oi": total_pe_oi,
+            "strikes":     strikes_data,
+            "fetched_at":  datetime.now(timezone.utc).isoformat(),
+        }
     finally:
         mc.close()
+        rdb.close()
 
-    # --- process quotes + compute per-strike metrics ---
-    bp           = f"fno:baseline:{symbol}:{expiry}"
-    strikes_data: list[dict] = []
-    total_ce_oi = total_pe_oi = total_ce_delta = total_pe_delta = 0.0
-
-    for s in strike_list:
-        row: dict[str, Any] = {"strike": s}
-        for typ in ("CE", "PE"):
-            sym  = f"NFO:{prefix}{s}{typ}"
-            q    = quotes.get(sym) or {}
-            if not q:
-                row[typ.lower()] = None
-                continue
-
-            ltp   = float(q.get("last_price", 0))
-            oi    = float(q.get("oi", 0))
-            ohlc  = q.get("ohlc") or {}
-            open_ = float(ohlc.get("open", 0))
-            high  = float(ohlc.get("high", 0))
-
-            # Delta OI via Redis baseline
-            b_key = f"{bp}:{s}:{typ}"
-            raw   = rdb.get(b_key)
-            if raw is None:
-                rdb.setex(b_key, _secs_to_ist_midnight(), str(oi))
-                delta = 0.0
-            else:
-                delta = oi - float(raw)
-
-            oh     = _is_oh(open_, high)
-            oh_hit = oh and _is_oh_hit(open_, ltp)
-
-            side = {
-                "ltp": ltp, "oi": oi, "delta_oi": delta,
-                "open": open_, "high": high,
-                "is_oh": oh, "is_oh_hit": oh_hit,
-            }
-
-            if typ == "CE":
-                total_ce_oi    += oi
-                total_ce_delta += delta
-            else:
-                total_pe_oi    += oi
-                total_pe_delta += delta
-
-            row[typ.lower()] = side
-        strikes_data.append(row)
-
-    rdb.close()
-
-    ratios = _compute_ratios(total_ce_oi, total_pe_oi, total_ce_delta, total_pe_delta)
-    return {
-        "symbol":      symbol,
-        "spot":        spot,
-        "expiry":      str(expiry),
-        "atm_strike":  atm,
-        **ratios,
-        "total_ce_oi": total_ce_oi,
-        "total_pe_oi": total_pe_oi,
-        "strikes":     strikes_data,
-        "fetched_at":  datetime.now(timezone.utc).isoformat(),
-    }
+    return result
 
 
 # ---------------------------------------------------------------------------

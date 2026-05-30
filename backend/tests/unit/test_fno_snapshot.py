@@ -114,7 +114,7 @@ def test_run_fno_snapshot_returns_expected_keys():
     mock_redis.get.return_value = None  # no baseline yet
 
     call_count = [0]
-    def fake_call_tool(self_ignored, name, arguments):
+    def fake_call_tool(name, arguments):
         call_count[0] += 1
         if name == "get_ltp":
             return fake_spot
