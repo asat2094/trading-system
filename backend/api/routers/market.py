@@ -99,6 +99,9 @@ async def upstox_callback(code: str = Query(...)):
         raise HTTPException(502, "No access_token in response")
     redis = get_redis()
     await redis.setex("upstox:token", 86400, access_token)
+    # Trigger Upstox adapter reconnect — was skipped at startup because no token existed
+    from api.market_ws import get_manager
+    await get_manager().reconnect_adapter("upstox")
     return {"status": "ok", "message": "Upstox connected. You can close this tab."}
 
 

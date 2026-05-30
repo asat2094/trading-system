@@ -41,7 +41,7 @@ class HyperliquidAdapter:
         if self._running:
             return
         
-        logging.info(f"Connecting to {self.NAME} websocket...")
+        logging.info(f"Connecting to {self.name} websocket...")
         
         try:
             self._ws = await websockets.connect("wss://api.hyperliquid.xyz/ws")
@@ -52,10 +52,10 @@ class HyperliquidAdapter:
             
             # Start the background reception loop
             self._recv_task = asyncio.create_task(self._recv_loop())
-            logging.info(f"{self.NAME} connected and listening for mid-prices.")
+            logging.info(f"{self.name} connected and listening for mid-prices.")
 
         except Exception as e:
-            logging.error(f"Failed to connect to {self.NAME}: {e}")
+            logging.error(f"Failed to connect to {self.name}: {e}")
             self._running = False
             self._ws = None
             raise
@@ -66,7 +66,7 @@ class HyperliquidAdapter:
             canonical = self._to_hl_coin(symbol)
             if canonical not in self._subscribed:
                 self._subscribed.add(canonical)
-                logging.info(f"Subscribed to {canonical} on {self.NAME}.")
+                logging.info(f"Subscribed to {canonical} on {self.name}.")
 
     async def unsubscribe(self, symbols: List[str]):
         """Removes symbols to track."""
@@ -74,7 +74,7 @@ class HyperliquidAdapter:
             canonical = self._to_hl_coin(symbol)
             if canonical in self._subscribed:
                 self._subscribed.remove(canonical)
-                logging.info(f"Unsubscribed from {canonical} on {self.NAME}.")
+                logging.info(f"Unsubscribed from {canonical} on {self.name}.")
 
     async def _recv_loop(self):
         """The main websocket message receiving and parsing loop."""
@@ -93,9 +93,9 @@ class HyperliquidAdapter:
                                 logging.warning(f"Skipping invalid mid-price for {coin_symbol}: {mid_price_str}")
                                 continue
 
-                            # 1. Get canonical symbol (e.g., BTC)
-                            canonical = coin_symbol 
-                            
+                            # coin_symbol is bare (e.g. "BTC"); _subscribed stores bare coins too
+                            canonical = coin_symbol
+
                             if canonical in self._subscribed:
                                 # 2. Determine tracking values
                                 prev_mid = self._last_mids.get(canonical, ltp)
@@ -107,8 +107,8 @@ class HyperliquidAdapter:
                                 
                                 # Quote parameters
                                 quote = Quote(
-                                    symbol=canonical, 
-                                    ltp=ltp, 
+                                    symbol=self._from_hl_coin(canonical),  # "CRYPTO:BTC" not "BTC"
+                                    ltp=ltp,
                                     open=open_price, 
                                     high=high_price, 
                                     low=low_price, 
@@ -127,31 +127,30 @@ class HyperliquidAdapter:
                     logging.error(f"Error processing websocket message: {e}")
                     
         except websockets.ConnectionClosedOK:
-            logging.info(f"{self.NAME} websocket closed normally.")
+            logging.info(f"{self.name} websocket closed normally.")
         except websockets.ConnectionClosedError as e:
-            logging.error(f"{self.NAME} websocket closed abruptly: {e}")
+            logging.error(f"{self.name} websocket closed abruptly: {e}")
         except Exception as e:
-            logging.error(f"Unexpected error in {_recv_loop}: {e}")
+            logging.error(f"{self.name} recv_loop unexpected error: {e}")
         finally:
             self._running = False
             self._ws = None
 
-
     async def quotes(self) -> AsyncIterator[Quote]:
-        """Async generator yielding received Quote objects."""
-        while self._running:
+        """Async generator — runs forever; yields quotes as they arrive even across reconnects."""
+        while True:
             try:
-                # Wait for a quote to be available in the queue
-                quote = await self._queue.get()
+                quote = await asyncio.wait_for(self._queue.get(), timeout=1.0)
                 yield quote
-                self._queue.task_done()
+            except asyncio.TimeoutError:
+                continue   # just keep waiting
             except asyncio.CancelledError:
                 return
 
     async def disconnect(self):
         """Closes the websocket connection and cancels the receiving task."""
         if self._running:
-            logging.info(f"Attempting to disconnect from {self.NAME}...")
+            logging.info(f"Attempting to disconnect from {self.name}...")
             
             # 1. Cancel the background task
             if self._recv_task:
@@ -167,4 +166,4 @@ class HyperliquidAdapter:
                 self._ws = None
                 
             self._running = False
-            logging.info(f"{self.NAME} successfully disconnected.")
+            logging.info(f"{self.name} successfully disconnected.")

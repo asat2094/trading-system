@@ -50,11 +50,32 @@ class MarketFeedManager:
             if id(adapter) in seen:
                 continue
             seen.add(id(adapter))
+            asyncio.create_task(self._connect_with_retry(adapter))
+
+    async def _connect_with_retry(self, adapter: BrokerAdapter, max_retries: int = 5) -> None:
+        """Try to connect an adapter, retrying with backoff on failure."""
+        for attempt in range(max_retries):
             try:
                 await adapter.connect()
+                log.info(f"adapter_connected name={adapter.name}")
                 asyncio.create_task(self._fan_out(adapter))
+                return
             except Exception as exc:
-                log.warning("adapter_connect_failed", extra={"adapter": adapter.name, "error": str(exc)})
+                wait = 2 ** attempt  # 1, 2, 4, 8, 16 seconds
+                log.warning(f"adapter_connect_failed name={adapter.name} error={exc!r} retry_in={wait}s")
+                await asyncio.sleep(wait)
+        log.error(f"adapter_failed_permanently name={adapter.name}")
+
+    async def reconnect_adapter(self, adapter_name: str) -> None:
+        """Called after OAuth token stored — reconnect a previously-failed adapter."""
+        seen = set()
+        for adapter in self._adapters.values():
+            if id(adapter) in seen:
+                continue
+            seen.add(id(adapter))
+            if adapter.name == adapter_name:
+                log.info(f"adapter_reconnect_triggered name={adapter_name}")
+                asyncio.create_task(self._connect_with_retry(adapter))
 
     async def _fan_out(self, adapter: BrokerAdapter) -> None:
         async for quote in adapter.quotes():

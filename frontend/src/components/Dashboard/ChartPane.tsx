@@ -63,12 +63,12 @@ export default function ChartPane({ paneId, focused, onFocus }: Props) {
       const { data } = await apiClient.get(`/technical/ohlcv/${ticker}`, {
         params: { tf, from_dt: fromDt, to_dt: toDt },
       });
-      return (data.bars ?? data) as Bar[];
+      return (data.rows ?? []) as Bar[];
     } else {
       const { data } = await apiClient.get("/market/ohlcv", {
         params: { symbol: sym, tf, from_dt: fromDt, to_dt: toDt },
       });
-      return (data.bars ?? data) as Bar[];
+      return (data.rows ?? []) as Bar[];
     }
   }, []);
 
