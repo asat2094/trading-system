@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # LLM
     ANTHROPIC_API_KEY: SecretStr = SecretStr("")
     LLM_MODEL: str = "claude-sonnet-4-6"
+
+    # Upstox market data feed
+    UPSTOX_API_KEY: str = ""
+    UPSTOX_API_SECRET: str = ""
     LLM_PROMPT_VERSION: str = "v1"
     LLM_DAILY_TOKEN_BUDGET: int = 100_000
 
@@ -36,6 +40,20 @@ class Settings(BaseSettings):
 
     # Scanner DSL version — bump on breaking DSL changes
     SCANNER_DSL_VERSION: int = 1
+
+    # ── Locale / market ──────────────────────────────────────────────────────
+    # All time comparisons, schedule specs, and display must use these values.
+    # Never hardcode "Asia/Kolkata", "+05:30", or "09:15" anywhere else.
+    TIMEZONE: str = "Asia/Kolkata"          # IANA timezone for IST
+    MARKET_OPEN_IST: str = "09:15"          # NSE session open (HH:MM, IST)
+    MARKET_CLOSE_IST: str = "15:30"         # NSE session close (HH:MM, IST)
+
+    # ── Daily refresh schedule ────────────────────────────────────────────────
+    # Cron expressed in TIMEZONE (IST).  16:45 = 45 min after market close.
+    DAILY_REFRESH_CRON: str = "45 16 * * 1-5"   # Mon–Fri 4:45 PM IST
+    DAILY_REFRESH_GAP_DAYS: int = 30             # how many days back to scan for gaps
+    DAILY_REFRESH_CONCURRENCY: int = 8           # parallel symbol fetches
+    DAILY_REFRESH_CATCHUP_HOURS: int = 36        # catch up missed runs within this window
 
     # Redis namespace — bump on breaking schema changes to auto-invalidate
     SCHEMA_VERSION: str = "v1"
