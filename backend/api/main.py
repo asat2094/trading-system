@@ -7,6 +7,8 @@ from api.middleware import TraceIdMiddleware
 from api.routers import auth, technical, scanner, admin, fno
 from api.routers.technical import warm_symbol_cache
 from api.signals_ws import websocket_endpoint
+from api.market_ws import market_ws_endpoint, get_manager
+from api.routers.market import router as market_router
 from core.logging import setup_logging
 
 
@@ -14,6 +16,18 @@ from core.logging import setup_logging
 async def lifespan(app: FastAPI):
     # Pre-warm symbol cache in background — doesn't block startup
     asyncio.create_task(warm_symbol_cache())
+    # Start market feed adapters
+    from brokers.upstox import UpstoxAdapter
+    from brokers.hyperliquid import HyperliquidAdapter
+    from core.cache import get_redis
+    from core.config import settings
+
+    mgr = get_manager()
+    redis_client = get_redis()
+    if settings.UPSTOX_API_KEY:
+        mgr.register(UpstoxAdapter(settings.UPSTOX_API_KEY, settings.UPSTOX_API_SECRET, redis_client))
+    mgr.register(HyperliquidAdapter())
+    asyncio.create_task(mgr.start())
     yield
 
 
@@ -35,6 +49,11 @@ def create_app() -> FastAPI:
     app.include_router(scanner.router)
     app.include_router(admin.router)
     app.include_router(fno.router)
+    app.include_router(market_router)
+
+    @app.websocket("/ws/market")
+    async def market_ws(ws: WebSocket, token: str):
+        await market_ws_endpoint(ws, token)
 
     @app.websocket("/ws/signals")
     async def signals_ws(ws: WebSocket, token: str, last_event_id: str = "0"):
