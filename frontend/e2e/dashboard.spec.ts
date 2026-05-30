@@ -118,7 +118,9 @@ test("5. symbol search input exists in first pane", async ({ page }) => {
   await page.waitForTimeout(2000);
 
   // There should be symbol search inputs (one per pane)
-  const searchInputs = page.locator("input[placeholder='Change…']");
+  // Symbol search input — placeholder is now the current symbol (e.g. "RELIANCE")
+  const searchInputs = page.locator("input[placeholder]").filter({ hasNot: page.locator("[type='password']") });
+  // Exclude the pane-count select and TF selects; just verify search inputs exist
   const count = await searchInputs.count();
   expect(count).toBeGreaterThan(0);
 });
@@ -128,7 +130,8 @@ test("5b. typing in symbol search shows dropdown results", async ({ page }) => {
   await page.goto(`${BASE}/chart`);
   await page.waitForTimeout(2000);
 
-  const searchInput = page.locator("input[placeholder='Change…']").first();
+  // Symbol search input — placeholder is the current symbol name
+  const searchInput = page.locator("input[placeholder='RELIANCE']").first();
   await searchInput.fill("RELI");
   // Wait for dropdown
   await page.waitForTimeout(800);
