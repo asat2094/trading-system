@@ -23,7 +23,7 @@ class HyperliquidAdapter:
         self._last_mids: Dict[str, float] = {}
         self._recv_task: asyncio.Task | None = None
         self._running = False
-        logging.info(f"{self.NAME} adapter initialized.")
+        logging.info(f"{self.name} adapter initialized.")
 
     @staticmethod
     def _to_hl_coin(symbol: str) -> str:
