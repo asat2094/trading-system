@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Login from "./pages/Login";
 import Screener from "./pages/Screener";
-import Chart from "./pages/Chart";
+import Dashboard from "./pages/Dashboard";
 import Sidebar from "./components/Layout/Sidebar";
 import ChatInterface from "./components/Chat/ChatInterface";
 import SignalFeedPanel from "./components/SignalFeed/SignalFeedPanel";
@@ -34,9 +34,10 @@ export default function App() {
           <Route path="/screener" element={
             <ProtectedRoute><AppLayout><Screener /></AppLayout></ProtectedRoute>
           } />
-          <Route path="/chart/:symbol" element={
-            <ProtectedRoute><AppLayout><Chart /></AppLayout></ProtectedRoute>
+          <Route path="/chart" element={
+            <ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>
           } />
+          <Route path="/chart/:symbol" element={<Navigate to="/chart" replace />} />
           <Route path="/signals" element={
             <ProtectedRoute><AppLayout><SignalFeedPanel /></AppLayout></ProtectedRoute>
           } />

@@ -5,7 +5,7 @@ import { logout } from "../../api/client";
 
 const NAV_ITEMS = [
   { path: "/screener", icon: "⊞", label: "Screener" },
-  { path: "/chart/RELIANCE", icon: "📈", label: "Charts" },
+  { path: "/chart", icon: "📊", label: "Dashboard" },
   { path: "/signals", icon: "🔔", label: "Signals" },
   { path: "/chat", icon: "💬", label: "AI Chat" },
   { path: "/fno", icon: "📈", label: "FnO Live" },
