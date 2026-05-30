@@ -16,6 +16,7 @@ Replace the existing single-symbol chart page with a configurable multi-pane liv
 
 ### In scope (Phase 1)
 
+- Market Status Bar: persistent strip above the grid showing live open/closed status for Indian, US, and crypto markets
 - Multi-pane grid: 1 / 2 / 4 / 6 / 8 panes with optimal layouts
 - Per-pane: symbol picker, timeframe picker, candlestick chart, ticker bar
 - Live prices: Upstox WebSocket v3 (NSE equities) + Hyperliquid WebSocket (crypto)
@@ -191,6 +192,48 @@ interface IndicatorConfig {
 
 ---
 
+## Market Status Bar
+
+Persistent strip rendered **above** the chart grid (below the top bar controls). Pure frontend — no API calls. Recomputes every 30 seconds via `setInterval`.
+
+### Markets displayed
+
+| Market | Exchange | Session (local time) | Timezone | Pre/After hours |
+|---|---|---|---|---|
+| 🇮🇳 India | NSE / BSE | 09:15 – 15:30 Mon–Fri | Asia/Kolkata (IST) | Pre: 09:00–09:15 |
+| 🇺🇸 US | NYSE / NASDAQ | 09:30 – 16:00 Mon–Fri | America/New_York (ET) | Pre: 04:00–09:30 · After: 16:00–20:00 |
+| ₿ Crypto | 24/7 | Always open | UTC | — |
+
+### Status states per market
+
+- **OPEN** — green dot + green label + countdown to close (`closes in 2h 14m`)
+- **PRE-MARKET** — amber dot + "PRE" label (US only)
+- **AFTER-HOURS** — amber dot + "AFTER" label (US only)
+- **CLOSED** — grey dot + "CLOSED" + countdown to next open (`opens in 17h 30m`)
+- **WEEKEND** — grey dot + "CLOSED" + `opens Mon 09:15 IST`
+
+### Layout (each market card)
+
+```
+[● OPEN]  India NSE     09:15–15:30 IST    closes in 2h 14m    13:16 IST
+[● PRE ]  US NYSE       09:30–16:00 ET     opens in 0h 22m     22:08 IST
+[∞ 24/7]  Crypto        Always open        BTC 67,420          UTC 17:38
+```
+
+Each card shows: status dot · market name · session hours · time remaining · current local time for that market.
+
+Crypto card shows live BTC LTP from `liveQuotes` store instead of a countdown (since it never closes).
+
+### Component
+
+```
+frontend/src/components/Dashboard/MarketStatusBar.tsx
+```
+
+Pure computation using `Intl.DateTimeFormat` for timezone conversion. No external dependency. Updates every 30 seconds. Mounts once at Dashboard level, always visible regardless of pane count.
+
+---
+
 ## Ticker Bar
 
 Displayed at the top of each pane. Fields: `Symbol | Timeframe | LTP | Change% | O | H | L | C | Volume`
@@ -332,6 +375,7 @@ Old `/chart/:symbol` links redirect to `/chart` (React Router `<Navigate>`).
 |---|---|
 | `frontend/src/pages/Dashboard.tsx` | NEW |
 | `frontend/src/pages/Chart.tsx` | DELETE (replaced by Dashboard) |
+| `frontend/src/components/Dashboard/MarketStatusBar.tsx` | NEW |
 | `frontend/src/components/Dashboard/PaneGrid.tsx` | NEW |
 | `frontend/src/components/Dashboard/ChartPane.tsx` | NEW |
 | `frontend/src/components/Dashboard/TickerBar.tsx` | NEW |
