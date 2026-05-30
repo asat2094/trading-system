@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { path: "/chart/RELIANCE", icon: "📈", label: "Charts" },
   { path: "/signals", icon: "🔔", label: "Signals" },
   { path: "/chat", icon: "💬", label: "AI Chat" },
+  { path: "/fno", icon: "📈", label: "FnO Live" },
 ];
 
 export default function Sidebar() {

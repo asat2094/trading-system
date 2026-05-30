@@ -6,6 +6,7 @@ import Chart from "./pages/Chart";
 import Sidebar from "./components/Layout/Sidebar";
 import ChatInterface from "./components/Chat/ChatInterface";
 import SignalFeedPanel from "./components/SignalFeed/SignalFeedPanel";
+import FnoLive from "./pages/FnoLive";
 import { isAuthenticated } from "./api/client";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,9 @@ export default function App() {
           } />
           <Route path="/chat" element={
             <ProtectedRoute><AppLayout><ChatInterface /></AppLayout></ProtectedRoute>
+          } />
+          <Route path="/fno" element={
+            <ProtectedRoute><AppLayout><FnoLive /></AppLayout></ProtectedRoute>
           } />
           <Route path="*" element={<Navigate to="/screener" replace />} />
         </Routes>
