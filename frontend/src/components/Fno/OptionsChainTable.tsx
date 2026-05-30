@@ -121,7 +121,7 @@ export default function OptionsChainTable({ snapshot }: Props) {
                 <td style={{ ...cell, color: ceLtp ? TV.down : TV.muted }}>
                   {fmt2(ceLtp)}
                 </td>
-                <td style={{ ...cell, color: row.ce?.delta_oi ?? 0 > 0 ? TV.down : TV.up }}>
+                <td style={{ ...cell, color: (row.ce?.delta_oi ?? 0) > 0 ? TV.down : TV.up }}>
                   {fmtDelta(row.ce?.delta_oi)}
                 </td>
                 <td style={{ ...cell, color: TV.text }}>
@@ -148,7 +148,7 @@ export default function OptionsChainTable({ snapshot }: Props) {
                 <td style={{ ...cell, textAlign: "left", color: TV.text }}>
                   {fmtOi(peOi)}
                 </td>
-                <td style={{ ...cell, textAlign: "left", color: row.pe?.delta_oi ?? 0 > 0 ? TV.up : TV.down }}>
+                <td style={{ ...cell, textAlign: "left", color: (row.pe?.delta_oi ?? 0) > 0 ? TV.up : TV.down }}>
                   {fmtDelta(row.pe?.delta_oi)}
                 </td>
                 <td style={{ ...cell, textAlign: "left", color: row.pe?.ltp ? TV.up : TV.muted }}>
