@@ -1,5 +1,6 @@
 """Temporal worker entrypoint — registers all activities and workflows."""
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from temporalio.client import Client
 from temporalio.worker import Worker
@@ -16,6 +17,11 @@ from workers.workflows.maintenance import (
     TradingCalendarSyncWorkflow,
 )
 from workers.workflows.market_events import MarketEventCollectorWorkflow
+from workers.workflows.kite1min_backfill import Kite1MinBackfillWorkflow
+from workers.workflows.csv_ingestion import CsvIngestionWorkflow
+from workers.workflows.daily_refresh import DailyRefreshWorkflow
+from workers.workflows.daily_index_refresh import DailyIndexRefreshWorkflow
+from workers.workflows.fno_snapshot import FnoSnapshotWorkflow
 
 
 async def main() -> None:
@@ -34,6 +40,7 @@ async def main() -> None:
     worker = Worker(
         client,
         task_queue="trading-main",
+        activity_executor=ThreadPoolExecutor(max_workers=20),
         workflows=[
             DailyEodWorkflow,
             Intraday1MinCollectorWorkflow,
@@ -42,6 +49,11 @@ async def main() -> None:
             RetentionSweepWorkflow,
             MarketCapRefreshWorkflow,
             TradingCalendarSyncWorkflow,
+            Kite1MinBackfillWorkflow,
+            CsvIngestionWorkflow,
+            DailyRefreshWorkflow,
+            DailyIndexRefreshWorkflow,
+            FnoSnapshotWorkflow,
         ],
         activities=activity_fns,
     )

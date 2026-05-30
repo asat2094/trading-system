@@ -246,3 +246,7 @@ def run_fno_snapshot(symbol: str = "NIFTY", strikes: int = 10) -> dict:
 async def fetch_fno_snapshot_activity(symbol: str = "NIFTY", strikes: int = 10) -> dict:
     """Temporal activity: async wrapper around sync run_fno_snapshot."""
     return await asyncio.to_thread(run_fno_snapshot, symbol, strikes)
+
+
+# Registry alias — required by workers/registry.py (auto-discovery expects `activity_fn`)
+activity_fn = fetch_fno_snapshot_activity
