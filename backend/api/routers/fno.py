@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from core.auth.middleware import get_current_user
+from core.auth.provider import User
 
 router = APIRouter(prefix="/fno", tags=["fno"])
 
@@ -12,6 +15,7 @@ router = APIRouter(prefix="/fno", tags=["fno"])
 async def get_fno_snapshot(
     symbol: str = Query("NIFTY", description="Underlying symbol (NIFTY only for v1)"),
     strikes: int = Query(10, ge=5, le=20, description="Number of strikes on each side of ATM"),
+    user: User = Depends(get_current_user),
 ):
     """
     Fetch live NIFTY FnO snapshot.

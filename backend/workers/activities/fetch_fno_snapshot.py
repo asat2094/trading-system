@@ -16,7 +16,7 @@ import httpx
 import redis as redis_lib
 from temporalio import activity
 
-from backend.workers.activities.fetch_kitemcp_1min import _kite_limiter
+from workers.activities.fetch_kitemcp_1min import _kite_limiter
 
 NIFTY_STEP   = 50
 NSE_NIFTY    = "NSE:NIFTY 50"
@@ -73,7 +73,7 @@ class _FnoMCPClient:
 
 def _redis() -> redis_lib.Redis:
     try:
-        from backend.core.config import settings
+        from core.config import settings
         url = settings.redis_url
     except Exception:
         url = _REDIS_FALLBACK
