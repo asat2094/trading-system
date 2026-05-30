@@ -4,7 +4,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from backend.workers.activities.fetch_fno_snapshot import fetch_fno_snapshot_activity
+    from workers.activities.fetch_fno_snapshot import fetch_fno_snapshot_activity
 
 
 @workflow.defn(name="FnoSnapshotWorkflow")
