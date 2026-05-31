@@ -30,10 +30,13 @@ const INDICATOR_DESCRIPTIONS: Record<IndicatorType, string> = {
   FVG: "Fair Value Gap zones",
 };
 
+export type IndicatorPanelMode = "global" | "individual";
+
 interface Props {
   paneId: string;
   indicators: IndicatorConfig[];
   onClose: () => void;
+  mode?: IndicatorPanelMode;
 }
 
 type SettingsTab = "Inputs" | "Style" | "Visibility";
@@ -42,15 +45,20 @@ interface SettingsLayerProps {
   paneId: string;
   indicator: IndicatorConfig;
   onBack: () => void;
+  mode: IndicatorPanelMode;
 }
 
-function SettingsLayer({ paneId, indicator, onBack }: SettingsLayerProps) {
-  const { updateIndicator } = useDashboardStore();
+function SettingsLayer({ paneId, indicator, onBack, mode }: SettingsLayerProps) {
+  const { updateIndicator, updateIndicatorByTypeAll } = useDashboardStore();
   const [tab, setTab] = useState<SettingsTab>("Inputs");
   const [draft, setDraft] = useState<IndicatorConfig>({ ...indicator, inputs: { ...indicator.inputs }, style: { ...indicator.style } });
 
   const handleApply = () => {
-    updateIndicator(paneId, draft);
+    if (mode === "global") {
+      updateIndicatorByTypeAll(draft.type, { inputs: draft.inputs, style: draft.style, visible: draft.visible });
+    } else {
+      updateIndicator(paneId, draft);
+    }
     onBack();
   };
 
@@ -201,7 +209,7 @@ function SettingsLayer({ paneId, indicator, onBack }: SettingsLayerProps) {
   );
 }
 
-export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
+export default function IndicatorPanel({ paneId, indicators, onClose, mode = "individual" }: Props) {
   const { addIndicator, addIndicatorToAll, removeIndicator, removeIndicatorFromAll } = useDashboardStore();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<IndicatorConfig | null>(null);
@@ -237,6 +245,7 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
           paneId={paneId}
           indicator={editing}
           onBack={() => setEditing(null)}
+          mode={mode}
         />
       ) : (
         <>
@@ -244,7 +253,11 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: `1px solid ${TV.border}` }}>
             <div>
               <span style={{ color: TV.text, fontSize: 12, fontWeight: 600 }}>Indicators</span>
-              <span style={{ color: TV.muted, fontSize: 10, marginLeft: 8 }}>+ applies to all charts · +1 focused only</span>
+              {mode === "global" ? (
+                <span style={{ color: TV.up, fontSize: 9, marginLeft: 8, border: `1px solid ${TV.up}`, borderRadius: 3, padding: "1px 5px" }}>ALL CHARTS</span>
+              ) : (
+                <span style={{ color: TV.muted, fontSize: 9, marginLeft: 8, border: `1px solid ${TV.border}`, borderRadius: 3, padding: "1px 5px" }}>THIS CHART</span>
+              )}
             </div>
             <button
               onClick={onClose}
@@ -345,7 +358,7 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
           {indicators.length > 0 && (
             <div style={{ borderTop: `1px solid ${TV.border}`, padding: "8px 12px" }}>
               <div style={{ fontSize: 10, color: TV.muted, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
-                Focused chart · ✕ this · ✕✕ all charts
+                {mode === "global" ? "All charts — ⚙ edits all · ✕ removes all" : "This chart — ⚙ edits this · ✕ removes this"}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {indicators.map((ind) => (
@@ -362,24 +375,17 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
                     </span>
                     <button
                       onClick={() => setEditing(ind)}
-                      title="Settings"
+                      title={mode === "global" ? "Edit settings on all charts" : "Edit settings on this chart"}
                       style={{ background: "transparent", border: "none", color: TV.muted, cursor: "pointer", fontSize: 10, padding: "0 1px", lineHeight: 1 }}
                     >
                       ⚙
                     </button>
                     <button
-                      onClick={() => removeIndicator(paneId, ind.id)}
-                      title="Remove from this chart"
+                      onClick={() => mode === "global" ? removeIndicatorFromAll(ind.type) : removeIndicator(paneId, ind.id)}
+                      title={mode === "global" ? "Remove from all charts" : "Remove from this chart"}
                       style={{ background: "transparent", border: "none", color: TV.down, cursor: "pointer", fontSize: 11, padding: "0 1px", lineHeight: 1 }}
                     >
                       ✕
-                    </button>
-                    <button
-                      onClick={() => removeIndicatorFromAll(ind.type)}
-                      title="Remove from all charts"
-                      style={{ background: "transparent", border: "none", color: TV.down, cursor: "pointer", fontSize: 9, padding: "0 1px", lineHeight: 1, opacity: 0.6 }}
-                    >
-                      ✕✕
                     </button>
                   </div>
                 ))}

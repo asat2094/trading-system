@@ -16,6 +16,7 @@ import PaneControls from "./PaneControls";
 import PaneClock from "./PaneClock";
 import DrawingDrawer from "./DrawingToolbar";
 import type { DrawMode, Drawing } from "./DrawingToolbar";
+import IndicatorPanel from "./IndicatorPanel";
 import * as marketWs from "../../lib/marketWs";
 
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
@@ -79,9 +80,10 @@ interface Props {
 
 export default function ChartPane({ paneId, focused, onFocus }: Props) {
   const pane = useDashboardStore((s) => s.panes.find((p) => p.id === paneId));
-  const [bars, setBars]       = useState<Bar[]>([]);
-  const [liveBar, setLiveBar] = useState<Bar | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [bars, setBars]         = useState<Bar[]>([]);
+  const [liveBar, setLiveBar]   = useState<Bar | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const chartRef  = useRef<ChartHandle>(null);
   const barsRef   = useRef<Bar[]>([]);
   const [priceLabel, setPriceLabel] = useState<{
@@ -298,6 +300,7 @@ export default function ChartPane({ paneId, focused, onFocus }: Props) {
         symbol={symbol}
         timeframe={timeframe}
         lastBar={liveBar ?? (bars.length > 0 ? bars[bars.length - 1] : null)}
+        onOpenIndicators={() => { onFocus(); setPanelOpen(v => !v); }}
       />
 
       {/* Content: drawing drawer (left) + chart area (flex 1) */}
@@ -555,6 +558,22 @@ export default function ChartPane({ paneId, focused, onFocus }: Props) {
           })()}
         </div>
       </div>
+
+      {/* Per-chart indicator panel — individual mode, position absolute over chart */}
+      {panelOpen && pane && (
+        <div style={{
+          position: "absolute", top: 0, right: 0, bottom: 0,
+          width: 260, zIndex: 100,
+          boxShadow: "-4px 0 16px rgba(0,0,0,0.6)",
+        }}>
+          <IndicatorPanel
+            paneId={paneId}
+            indicators={pane.indicators}
+            onClose={() => setPanelOpen(false)}
+            mode="individual"
+          />
+        </div>
+      )}
     </div>
   );
 }

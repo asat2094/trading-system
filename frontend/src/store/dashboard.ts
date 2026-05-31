@@ -89,6 +89,7 @@ interface DashboardStore {
   updateIndicator:      (paneId: string, ind: IndicatorConfig) => void;
   removeIndicator:      (paneId: string, indicatorId: string) => void;
   removeIndicatorFromAll: (type: IndicatorType) => void;
+  updateIndicatorByTypeAll: (type: IndicatorType, patch: Pick<IndicatorConfig, "inputs" | "style" | "visible">) => void;
 }
 
 const EXTRA_SYMBOLS = [
@@ -157,6 +158,15 @@ export const useDashboardStore = create<DashboardStore>()(
       removeIndicatorFromAll: (type) => set((s) => ({
         panes: s.panes.map((p) => ({
           ...p, indicators: p.indicators.filter((i) => i.type !== type),
+        })),
+      })),
+
+      updateIndicatorByTypeAll: (type, patch) => set((s) => ({
+        panes: s.panes.map((p) => ({
+          ...p,
+          indicators: p.indicators.map((i) =>
+            i.type === type ? { ...i, ...patch } : i
+          ),
         })),
       })),
     }),

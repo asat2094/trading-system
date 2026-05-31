@@ -200,6 +200,7 @@ export default function Dashboard() {
               paneId={focusedPane?.id ?? panes[0]?.id ?? ""}
               indicators={focusedPane?.indicators ?? []}
               onClose={() => setIndicatorOpen(false)}
+              mode="global"
             />
           </div>
         )}
