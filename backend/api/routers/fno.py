@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core.auth.middleware import get_current_user
@@ -21,16 +22,21 @@ async def get_fno_snapshot(
     Fetch live NIFTY FnO snapshot.
 
     Returns PCR, PCDR, PCD (put-call metrics) and per-strike CE/PE data
-    including Open-High candle detection.  Triggers exactly 2 Kite MCP calls.
+    including Open-High candle detection.
 
-    Rate constraint: Kite MCP is limited to 180 RPM.  The endpoint will block
-    for the duration of the fetch (~1–3 s).  A 30-second Redis cache is NOT
-    applied here — the caller (UI) controls refresh frequency via a button.
+    Falls back to cached Redis data if Kite MCP session is expired.
     """
     try:
         from workers.activities.fetch_fno_snapshot import run_fno_snapshot
         result = await asyncio.to_thread(run_fno_snapshot, symbol, strikes)
         return result
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 400:
+            raise HTTPException(
+                status_code=503,
+                detail="Kite MCP session expired. Run: cd backend && PYTHONPATH=. python scripts/backfill_1min_kitemcp.py --auth"
+            ) from exc
+        raise HTTPException(status_code=503, detail=f"Kite MCP error: {exc}") from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
