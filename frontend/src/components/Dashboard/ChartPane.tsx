@@ -23,6 +23,15 @@ const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
 const FIB_COLORS = ["#ef5350", "#f59e0b", "#26a69a", "#2196f3", "#26a69a", "#f59e0b", "#ef5350"];
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+function contrastText(hex: string): string {
+  try {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? "#131722" : "#fff";
+  } catch { return "#fff"; }
+}
+
 const TV = {
   bg: "#131722", border: "#2a2e39",
   text: "#d1d4dc", muted: "#787b86",
@@ -535,7 +544,7 @@ export default function ChartPane({ paneId, focused, onFocus }: Props) {
                       position: "absolute",
                       top: Math.round(l.y) - h / 2,
                       right: 0, width: sw, height: h,
-                      background: l.color, color: "#fff",
+                      background: l.color, color: contrastText(l.color),
                       fontFamily: "monospace", fontWeight: l.isPrice ? 700 : 500,
                       fontSize: 10, textAlign: "center",
                       pointerEvents: "none", zIndex: 20, userSelect: "none",
