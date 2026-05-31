@@ -32,11 +32,18 @@ const INDICATOR_DESCRIPTIONS: Record<IndicatorType, string> = {
 
 export type IndicatorPanelMode = "global" | "individual";
 
+export interface LocalIndicatorHandlers {
+  onAdd:    (type: IndicatorType) => void;
+  onRemove: (id: string) => void;
+  onUpdate: (ind: IndicatorConfig) => void;
+}
+
 interface Props {
   paneId: string;
   indicators: IndicatorConfig[];
   onClose: () => void;
   mode?: IndicatorPanelMode;
+  local?: LocalIndicatorHandlers;  // when set: bypasses store entirely
 }
 
 type SettingsTab = "Inputs" | "Style" | "Visibility";
@@ -46,18 +53,20 @@ interface SettingsLayerProps {
   indicator: IndicatorConfig;
   onBack: () => void;
   mode: IndicatorPanelMode;
+  local?: LocalIndicatorHandlers;
 }
 
-function SettingsLayer({ paneId, indicator, onBack, mode }: SettingsLayerProps) {
-  const { updateIndicator, updateIndicatorByTypeAll, updateIndicatorByLinkId } = useDashboardStore();
+function SettingsLayer({ paneId, indicator, onBack, mode, local }: SettingsLayerProps) {
+  const { updateIndicator, updateIndicatorByLinkId } = useDashboardStore();
   const [tab, setTab] = useState<SettingsTab>("Inputs");
   const [draft, setDraft] = useState<IndicatorConfig>({ ...indicator, inputs: { ...indicator.inputs }, style: { ...indicator.style } });
 
   const handleApply = () => {
-    if (mode === "global" && draft.linkId) {
+    if (local) {
+      local.onUpdate(draft);
+    } else if (mode === "global" && draft.linkId) {
       updateIndicatorByLinkId(draft.linkId, { inputs: draft.inputs, style: draft.style, visible: draft.visible });
     } else {
-      // No linkId = added per-pane or old data — always update only this pane
       updateIndicator(paneId, draft);
     }
     onBack();
@@ -210,7 +219,7 @@ function SettingsLayer({ paneId, indicator, onBack, mode }: SettingsLayerProps) 
   );
 }
 
-export default function IndicatorPanel({ paneId, indicators, onClose, mode = "individual" }: Props) {
+export default function IndicatorPanel({ paneId, indicators, onClose, mode = "individual", local }: Props) {
   const { addIndicator, addIndicatorToAll, removeIndicator, removeIndicatorFromAll, removeIndicatorByLinkId } = useDashboardStore();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<IndicatorConfig | null>(null);
@@ -247,6 +256,7 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
           indicator={editing}
           onBack={() => setEditing(null)}
           mode={mode}
+          local={local}
         />
       ) : (
         <>
@@ -308,8 +318,8 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
                         <div style={{ fontSize: 10, color: TV.muted }}>{INDICATOR_DESCRIPTIONS[type]}</div>
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={() => addIndicatorToAll(type)} style={btnStyle} title="Add to all charts">+</button>
-                        <button onClick={() => addIndicator(paneId, type)} style={{ ...btnStyle, fontSize: 9, opacity: 0.6 }} title="Add to focused chart only">+1</button>
+                        <button onClick={() => local ? local.onAdd(type) : addIndicatorToAll(type)} style={btnStyle} title={local ? "Add indicator" : "Add to all charts"}>+</button>
+                        {!local && <button onClick={() => addIndicator(paneId, type)} style={{ ...btnStyle, fontSize: 9, opacity: 0.6 }} title="Add to focused chart only">+1</button>}
                       </div>
                     </div>
                   );
@@ -339,8 +349,8 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
                         <div style={{ fontSize: 10, color: TV.muted }}>{INDICATOR_DESCRIPTIONS[type]}</div>
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={() => addIndicatorToAll(type)} style={btnStyle} title="Add to all charts">+</button>
-                        <button onClick={() => addIndicator(paneId, type)} style={{ ...btnStyle, fontSize: 9, opacity: 0.6 }} title="Add to focused chart only">+1</button>
+                        <button onClick={() => local ? local.onAdd(type) : addIndicatorToAll(type)} style={btnStyle} title={local ? "Add indicator" : "Add to all charts"}>+</button>
+                        {!local && <button onClick={() => addIndicator(paneId, type)} style={{ ...btnStyle, fontSize: 9, opacity: 0.6 }} title="Add to focused chart only">+1</button>}
                       </div>
                     </div>
                   );
@@ -383,7 +393,9 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
                     </button>
                     <button
                       onClick={() => {
-                        if (mode === "global" && ind.linkId) {
+                        if (local) {
+                          local.onRemove(ind.id);
+                        } else if (mode === "global" && ind.linkId) {
                           removeIndicatorByLinkId(ind.linkId);
                         } else {
                           removeIndicator(paneId, ind.id);
