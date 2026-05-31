@@ -15,6 +15,7 @@ export interface IndicatorConfig {
   inputs: Record<string, number | string | boolean>;
   style: Record<string, string>;
   visible: boolean;
+  linkId?: string;  // shared across all panes when added via addIndicatorToAll
 }
 
 export interface PaneConfig {
@@ -90,6 +91,8 @@ interface DashboardStore {
   removeIndicator:      (paneId: string, indicatorId: string) => void;
   removeIndicatorFromAll: (type: IndicatorType) => void;
   updateIndicatorByTypeAll: (type: IndicatorType, patch: Pick<IndicatorConfig, "inputs" | "style" | "visible">) => void;
+  updateIndicatorByLinkId: (linkId: string, patch: Pick<IndicatorConfig, "inputs" | "style" | "visible">) => void;
+  removeIndicatorByLinkId: (linkId: string) => void;
 }
 
 const EXTRA_SYMBOLS = [
@@ -133,11 +136,14 @@ export const useDashboardStore = create<DashboardStore>()(
         ),
       })),
 
-      addIndicatorToAll: (type) => set((s) => ({
-        panes: s.panes.map((p) => ({
-          ...p, indicators: [...p.indicators, makeDefaultIndicator(type)],
-        })),
-      })),
+      addIndicatorToAll: (type) => set((s) => {
+        const linkId = Math.random().toString(36).slice(2, 10);
+        return {
+          panes: s.panes.map((p) => ({
+            ...p, indicators: [...p.indicators, { ...makeDefaultIndicator(type), linkId }],
+          })),
+        };
+      }),
 
       updateIndicator: (paneId, ind) => set((s) => ({
         panes: s.panes.map((p) =>
@@ -167,6 +173,21 @@ export const useDashboardStore = create<DashboardStore>()(
           indicators: p.indicators.map((i) =>
             i.type === type ? { ...i, ...patch } : i
           ),
+        })),
+      })),
+
+      updateIndicatorByLinkId: (linkId, patch) => set((s) => ({
+        panes: s.panes.map((p) => ({
+          ...p,
+          indicators: p.indicators.map((i) =>
+            i.linkId === linkId ? { ...i, ...patch } : i
+          ),
+        })),
+      })),
+
+      removeIndicatorByLinkId: (linkId) => set((s) => ({
+        panes: s.panes.map((p) => ({
+          ...p, indicators: p.indicators.filter((i) => i.linkId !== linkId),
         })),
       })),
     }),

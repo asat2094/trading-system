@@ -49,13 +49,18 @@ interface SettingsLayerProps {
 }
 
 function SettingsLayer({ paneId, indicator, onBack, mode }: SettingsLayerProps) {
-  const { updateIndicator, updateIndicatorByTypeAll } = useDashboardStore();
+  const { updateIndicator, updateIndicatorByTypeAll, updateIndicatorByLinkId } = useDashboardStore();
   const [tab, setTab] = useState<SettingsTab>("Inputs");
   const [draft, setDraft] = useState<IndicatorConfig>({ ...indicator, inputs: { ...indicator.inputs }, style: { ...indicator.style } });
 
   const handleApply = () => {
     if (mode === "global") {
-      updateIndicatorByTypeAll(draft.type, { inputs: draft.inputs, style: draft.style, visible: draft.visible });
+      const patch = { inputs: draft.inputs, style: draft.style, visible: draft.visible };
+      if (draft.linkId) {
+        updateIndicatorByLinkId(draft.linkId, patch);
+      } else {
+        updateIndicatorByTypeAll(draft.type, patch);
+      }
     } else {
       updateIndicator(paneId, draft);
     }
@@ -210,7 +215,7 @@ function SettingsLayer({ paneId, indicator, onBack, mode }: SettingsLayerProps) 
 }
 
 export default function IndicatorPanel({ paneId, indicators, onClose, mode = "individual" }: Props) {
-  const { addIndicator, addIndicatorToAll, removeIndicator, removeIndicatorFromAll } = useDashboardStore();
+  const { addIndicator, addIndicatorToAll, removeIndicator, removeIndicatorFromAll, removeIndicatorByLinkId } = useDashboardStore();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<IndicatorConfig | null>(null);
 
@@ -381,7 +386,13 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
                       ⚙
                     </button>
                     <button
-                      onClick={() => mode === "global" ? removeIndicatorFromAll(ind.type) : removeIndicator(paneId, ind.id)}
+                      onClick={() => {
+                        if (mode === "global") {
+                          ind.linkId ? removeIndicatorByLinkId(ind.linkId) : removeIndicatorFromAll(ind.type);
+                        } else {
+                          removeIndicator(paneId, ind.id);
+                        }
+                      }}
                       title={mode === "global" ? "Remove from all charts" : "Remove from this chart"}
                       style={{ background: "transparent", border: "none", color: TV.down, cursor: "pointer", fontSize: 11, padding: "0 1px", lineHeight: 1 }}
                     >
