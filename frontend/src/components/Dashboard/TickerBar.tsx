@@ -21,27 +21,37 @@ interface Props {
   symbol: string;
   timeframe: string;
   onOpenIndicators?: () => void;
+  lastBar?: { open: number; high: number; low: number; close: number; volume: number } | null;
 }
 
-export default function TickerBar({ symbol, timeframe, onOpenIndicators }: Props) {
+export default function TickerBar({ symbol, timeframe, onOpenIndicators, lastBar }: Props) {
   const quote   = useLiveQuotesStore((s) => s.quotes[symbol]);
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   const prevLtpRef = useRef<number | null>(null);
 
+  // ltp: live trade price from quote stream
+  // OHLCV: from lastBar (the live-updated current candle) — NOT from quote
+  //   because each quote only carries trade-level O/H/L/C (single trade),
+  //   while lastBar tracks the candle aggregate across all ticks.
+  const ltp    = quote?.ltp    ?? lastBar?.close ?? null;
+  const open   = lastBar?.open  ?? null;
+  const high   = lastBar?.high  ?? null;
+  const low    = lastBar?.low   ?? null;
+  const close  = ltp ?? lastBar?.close ?? null;
+  const volume = lastBar?.volume ?? 0;
+
   useEffect(() => {
-    if (!quote) return;
+    if (ltp == null) return;
     const prev = prevLtpRef.current;
-    if (prev !== null && quote.ltp !== prev) {
-      setFlash(quote.ltp > prev ? "up" : "down");
+    if (prev !== null && ltp !== prev) {
+      setFlash(ltp > prev ? "up" : "down");
       const t = setTimeout(() => setFlash(null), 600);
-      prevLtpRef.current = quote.ltp;
+      prevLtpRef.current = ltp;
       return () => clearTimeout(t);
     }
-    prevLtpRef.current = quote.ltp;
-  }, [quote?.ltp]);
+    prevLtpRef.current = ltp;
+  }, [ltp]);
 
-  const ltp    = quote?.ltp ?? null;
-  const open   = quote?.open ?? null;
   const change = ltp != null && open != null && open !== 0
     ? ((ltp - open) / open) * 100 : null;
   const isUp       = change != null && change >= 0;
@@ -71,13 +81,13 @@ export default function TickerBar({ symbol, timeframe, onOpenIndicators }: Props
           {isUp ? "+" : ""}{change.toFixed(2)}%
         </span>
       )}
-      {quote && (
+      {ltp != null && (
         <span style={{ color: TV.muted, fontSize: 10, display: "flex", gap: 5 }}>
-          <span>O <b style={{ color: TV.text }}>{quote.open.toFixed(2)}</b></span>
-          <span>H <b style={{ color: TV.up   }}>{quote.high.toFixed(2)}</b></span>
-          <span>L <b style={{ color: TV.down }}>{quote.low.toFixed(2)}</b></span>
-          <span>C <b style={{ color: TV.text }}>{quote.close.toFixed(2)}</b></span>
-          <span>V <b style={{ color: TV.muted }}>{fmtVol(quote.volume)}</b></span>
+          <span>O <b style={{ color: TV.text }}>{(open ?? 0).toFixed(2)}</b></span>
+          <span>H <b style={{ color: TV.up   }}>{(high ?? 0).toFixed(2)}</b></span>
+          <span>L <b style={{ color: TV.down }}>{(low ?? 0).toFixed(2)}</b></span>
+          <span>C <b style={{ color: TV.text }}>{(close ?? 0).toFixed(2)}</b></span>
+          <span>V <b style={{ color: TV.muted }}>{fmtVol(volume)}</b></span>
         </span>
       )}
       <div style={{ flex: 1 }} />

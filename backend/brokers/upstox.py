@@ -99,6 +99,7 @@ class UpstoxAdapter:
         self._ws = None
         self._queue: asyncio.Queue[Quote] = asyncio.Queue()
         self._subscribed: set[str] = set()
+        self._running = False
 
     async def _get_token(self) -> str | None:
         """Fetch the stored Upstox access token from Redis."""
@@ -117,6 +118,13 @@ class UpstoxAdapter:
                     "Accept": "application/json",
                 },
             )
+            if resp.status_code == 401:
+                # Token is stale — delete it from Redis so status shows disconnected correctly
+                try:
+                    await self._redis.delete("upstox:token")
+                    log.warning("upstox_token_expired: cleared stale token from Redis")
+                except Exception:
+                    pass
             resp.raise_for_status()
             return resp.json()["data"]["authorizedRedirectUri"]
 
@@ -126,12 +134,15 @@ class UpstoxAdapter:
 
     async def connect(self) -> None:
         """Obtain WS URL from Upstox, open the connection, start recv loop."""
+        if self._running:
+            return
         token = await self._get_token()
         if not token:
             log.warning("upstox_no_token: call /auth/upstox/login first")
             return
         ws_url = await self._get_ws_url(token)
         self._ws = await websockets.connect(ws_url)
+        self._running = True
         log.info("upstox_connected url=%s", ws_url[:60])
         asyncio.create_task(self._recv_loop())
 
@@ -172,6 +183,7 @@ class UpstoxAdapter:
 
     async def disconnect(self) -> None:
         """Close the WebSocket connection."""
+        self._running = False
         if self._ws:
             await self._ws.close()
             self._ws = None
@@ -190,6 +202,9 @@ class UpstoxAdapter:
             log.info("upstox_ws_closed_clean")
         except Exception as exc:
             log.warning("upstox_recv_error error=%s", exc)
+        finally:
+            self._running = False
+            self._ws = None
 
     def _decode_and_enqueue(self, data: bytes) -> None:
         """Decode a FeedResponse protobuf frame and push Quote(s) onto the queue.

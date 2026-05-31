@@ -4,6 +4,7 @@
  */
 import { useState, useEffect } from "react";
 import { useLiveQuotesStore } from "../../store/liveQuotes";
+import * as marketWs from "../../lib/marketWs";
 
 const TV = {
   bg: "#131722", border: "#2a2e39",
@@ -156,6 +157,12 @@ export default function MarketStatusBar() {
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 30_000);
     return () => clearInterval(id);
+  }, []);
+
+  // Auto-subscribe to BTC so we always have a price for the status bar
+  useEffect(() => {
+    marketWs.subscribe(["CRYPTO:BTC"]);
+    return () => { marketWs.unsubscribe(["CRYPTO:BTC"]); };
   }, []);
 
   void tick; // trigger recompute on interval

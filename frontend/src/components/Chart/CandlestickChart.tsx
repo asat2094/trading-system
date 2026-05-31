@@ -49,25 +49,25 @@ import {
   type Bar,
   calcEMA, calcSMA, calcBB, calcVWAP, calcRSI, calcMACD, calcStoch,
 } from "./indicators";
+import { tsToUnix } from "../../lib/time";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySeries = any;
 
 export interface ChartHandle {
   candleSeries: AnySeries | null;
+  volumeSeries: AnySeries | null;
   chart: IChartApi | null;
 }
 
-function tsToUnix(ts: string): UTCTimestamp {
-  return (new Date(ts.includes("T") ? ts + "+05:30" : ts).getTime() / 1000) as UTCTimestamp;
-}
 
 function filterNaN(
   bars: Bar[],
   values: number[],
+  tfOffsetSec = 0,
 ): { time: UTCTimestamp; value: number }[] {
   return bars
-    .map((b, i) => ({ time: tsToUnix(b.ts), value: values[i] }))
+    .map((b, i) => ({ time: (tsToUnix(b.ts) + tfOffsetSec) as UTCTimestamp, value: values[i] }))
     .filter(d => !isNaN(d.value));
 }
 
@@ -75,21 +75,28 @@ interface Props {
   bars: Bar[];
   studies: StudyConfig[];
   onNeedMoreData?: () => void;
+  /** Seconds to add to each bar's open-time so the chart axis shows candle CLOSE time. */
+  tfOffsetSec?: number;
+  /** Called whenever the visible time range changes (pan / zoom). Use to re-render drawing overlays. */
+  onVisibleRangeChange?: () => void;
 }
 
 const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChart(
-  { bars, studies, onNeedMoreData },
+  { bars, studies, onNeedMoreData, tfOffsetSec = 0, onVisibleRangeChange },
   ref
 ) {
-  const containerRef       = useRef<HTMLDivElement>(null);
-  const chartRef           = useRef<IChartApi | null>(null);
-  const onNeedMoreRef      = useRef(onNeedMoreData);
+  const containerRef          = useRef<HTMLDivElement>(null);
+  const chartRef              = useRef<IChartApi | null>(null);
+  const onNeedMoreRef         = useRef(onNeedMoreData);
+  const onVisibleRangeRef     = useRef(onVisibleRangeChange);
   const candleSeriesRef    = useRef<AnySeries>(null);
   const volumeSeriesRef    = useRef<AnySeries>(null);
+  const didFitContent      = useRef(false);
   // studyId → array of series belonging to that study
   const studySeriesRef     = useRef<Map<string, AnySeries[]>>(new Map());
 
   useEffect(() => { onNeedMoreRef.current = onNeedMoreData; }, [onNeedMoreData]);
+  useEffect(() => { onVisibleRangeRef.current = onVisibleRangeChange; }, [onVisibleRangeChange]);
 
   // ── Create chart once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -122,21 +129,27 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     });
     chartRef.current = chart;
 
-    // Fixed pane 0: candlesticks
+    // lastValueVisible: false — ChartPane renders a custom two-line overlay
+    // (price + bar-close countdown) so we don't show the default label.
     candleSeriesRef.current = chart.addSeries(CandlestickSeries, {
       upColor: "#26a69a", downColor: "#ef5350",
       borderVisible: false,
       wickUpColor: "#26a69a", wickDownColor: "#ef5350",
+      lastValueVisible: false,
     }, 0);
 
-    // Fixed pane 1: volume
+    // Volume overlay on main chart pane — separate price scale at bottom
     volumeSeriesRef.current = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "vol",
-    }, 1);
-    chart.panes()[1]?.setHeight(80);
+    }, 0);
+    chart.priceScale("vol").applyOptions({
+      scaleMargins: { top: 0.8, bottom: 0 },
+    });
 
-    const ro = new ResizeObserver(() => chart.timeScale().fitContent());
+    const ro = new ResizeObserver(() => {
+      if (!didFitContent.current) chart.timeScale().fitContent();
+    });
     ro.observe(containerRef.current!);
 
     const onRangeChange = (range: LogicalRange | null) => {
@@ -144,8 +157,12 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange);
 
+    const onTimeRangeChange = () => onVisibleRangeRef.current?.();
+    chart.timeScale().subscribeVisibleTimeRangeChange(onTimeRangeChange);
+
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange);
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(onTimeRangeChange);
       ro.disconnect();
       chart.remove();
       chartRef.current = null;
@@ -166,13 +183,16 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       .filter((b, i, arr) => i === 0 || tsToUnix(b.ts) !== tsToUnix(arr[i - 1].ts));
 
     // ── Set base candle + volume data ────────────────────────────────────────
+    // tfOffsetSec shifts open-time → close-time so the axis shows candle close.
+    const toDisplayTime = (ts: string) => (tsToUnix(ts) + tfOffsetSec) as UTCTimestamp;
+
     candleSeriesRef.current.setData(sorted.map(b => ({
-      time: tsToUnix(b.ts),
+      time: toDisplayTime(b.ts),
       open: b.open, high: b.high, low: b.low, close: b.close,
     })));
 
     volumeSeriesRef.current.setData(sorted.map(b => ({
-      time: tsToUnix(b.ts),
+      time: toDisplayTime(b.ts),
       value: b.volume,
       color: b.close >= b.open ? "#26a69a66" : "#ef535066",
     })));
@@ -204,15 +224,14 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
       // ── EMA ────────────────────────────────────────────────────────────────
       if (study.type === "EMA") {
-        const data = filterNaN(sorted, calcEMA(closes, study.period));
+        const data = filterNaN(sorted, calcEMA(closes, study.period), tfOffsetSec);
         if (existing) {
           existing[0].applyOptions({ color: study.color });
           existing[0].setData(data);
         } else {
           const s = chart.addSeries(LineSeries, {
             color: study.color, lineWidth: 1,
-            priceLineVisible: false, lastValueVisible: true,
-            title: `EMA(${study.period})`,
+            priceLineVisible: false, lastValueVisible: false,
           }, paneIdx);
           s.setData(data);
           studySeriesRef.current.set(study.id, [s]);
@@ -220,15 +239,14 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
       // ── SMA ────────────────────────────────────────────────────────────────
       } else if (study.type === "SMA") {
-        const data = filterNaN(sorted, calcSMA(closes, study.period));
+        const data = filterNaN(sorted, calcSMA(closes, study.period), tfOffsetSec);
         if (existing) {
           existing[0].applyOptions({ color: study.color });
           existing[0].setData(data);
         } else {
           const s = chart.addSeries(LineSeries, {
             color: study.color, lineWidth: 1,
-            priceLineVisible: false, lastValueVisible: true,
-            title: `SMA(${study.period})`,
+            priceLineVisible: false, lastValueVisible: false,
           }, paneIdx);
           s.setData(data);
           studySeriesRef.current.set(study.id, [s]);
@@ -237,9 +255,9 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       // ── Bollinger Bands ────────────────────────────────────────────────────
       } else if (study.type === "BB") {
         const { upper, mid, lower } = calcBB(closes, study.period, study.std);
-        const uData = filterNaN(sorted, upper);
-        const mData = filterNaN(sorted, mid);
-        const lData = filterNaN(sorted, lower);
+        const uData = filterNaN(sorted, upper, tfOffsetSec);
+        const mData = filterNaN(sorted, mid, tfOffsetSec);
+        const lData = filterNaN(sorted, lower, tfOffsetSec);
         if (existing && existing.length === 3) {
           existing[0].applyOptions({ color: study.upperColor }); existing[0].setData(uData);
           existing[1].applyOptions({ color: study.midColor });   existing[1].setData(mData);
@@ -260,14 +278,14 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
       // ── VWAP ───────────────────────────────────────────────────────────────
       } else if (study.type === "VWAP") {
-        const data = filterNaN(sorted, calcVWAP(sorted));
+        const data = filterNaN(sorted, calcVWAP(sorted), tfOffsetSec);
         if (existing) {
           existing[0].applyOptions({ color: study.color });
           existing[0].setData(data);
         } else {
           const s = chart.addSeries(LineSeries, {
             color: study.color, lineWidth: 1,
-            priceLineVisible: false, lastValueVisible: true, title: "VWAP",
+            priceLineVisible: false, lastValueVisible: false,
           }, paneIdx);
           s.setData(data);
           studySeriesRef.current.set(study.id, [s]);
@@ -275,7 +293,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
       // ── RSI ────────────────────────────────────────────────────────────────
       } else if (study.type === "RSI") {
-        const rsi   = filterNaN(sorted, calcRSI(closes, study.period));
+        const rsi   = filterNaN(sorted, calcRSI(closes, study.period), tfOffsetSec);
         const isNew = !existing;
         if (existing) {
           existing[0].applyOptions({ color: study.color });
@@ -288,8 +306,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
         } else {
           const sRSI = chart.addSeries(LineSeries, {
             color: study.color, lineWidth: 1,
-            priceLineVisible: false, lastValueVisible: true,
-            title: `RSI(${study.period})`,
+            priceLineVisible: false, lastValueVisible: false,
             autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
           }, paneIdx);
           const s70 = chart.addSeries(LineSeries, {
@@ -314,11 +331,11 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       // ── MACD ───────────────────────────────────────────────────────────────
       } else if (study.type === "MACD") {
         const { macd, signal, histogram } = calcMACD(closes, study.fast, study.slow, study.signal);
-        const macdData  = filterNaN(sorted, macd);
-        const sigData   = filterNaN(sorted, signal);
+        const macdData  = filterNaN(sorted, macd, tfOffsetSec);
+        const sigData   = filterNaN(sorted, signal, tfOffsetSec);
         const histData  = sorted
           .map((b, i) => ({
-            time: tsToUnix(b.ts), value: histogram[i],
+            time: (tsToUnix(b.ts) + tfOffsetSec) as UTCTimestamp, value: histogram[i],
             color: histogram[i] >= 0 ? "#26a69a88" : "#ef535088",
           }))
           .filter(d => !isNaN(d.value));
@@ -331,11 +348,11 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
           if (existing) existing.forEach(s => chart.removeSeries(s));
           const sMACD = chart.addSeries(LineSeries, {
             color: study.macdColor, lineWidth: 1,
-            priceLineVisible: false, lastValueVisible: true, title: "MACD",
+            priceLineVisible: false, lastValueVisible: false,
           }, paneIdx);
           const sSig = chart.addSeries(LineSeries, {
             color: study.signalColor, lineWidth: 1,
-            priceLineVisible: false, lastValueVisible: true, title: "Signal",
+            priceLineVisible: false, lastValueVisible: false,
           }, paneIdx);
           const sHist = chart.addSeries(HistogramSeries, {
             priceScaleId: "",
@@ -351,8 +368,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       // ── Stochastic ─────────────────────────────────────────────────────────
       } else if (study.type === "Stoch") {
         const { k, d } = calcStoch(bars, study.k, study.d, study.smooth);
-        const kData = filterNaN(sorted, k);
-        const dData = filterNaN(sorted, d);
+        const kData = filterNaN(sorted, k, tfOffsetSec);
+        const dData = filterNaN(sorted, d, tfOffsetSec);
         if (existing && existing.length === 2) {
           existing[0].applyOptions({ color: study.kColor }); existing[0].setData(kData);
           existing[1].applyOptions({ color: study.dColor }); existing[1].setData(dData);
@@ -360,12 +377,12 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
           if (existing) existing.forEach(s => chart.removeSeries(s));
           const sK = chart.addSeries(LineSeries, {
             color: study.kColor, lineWidth: 1,
-            priceLineVisible: false, lastValueVisible: true, title: "%K",
+            priceLineVisible: false, lastValueVisible: false,
             autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }),
           }, paneIdx);
           const sD = chart.addSeries(LineSeries, {
             color: study.dColor, lineWidth: 1,
-            priceLineVisible: false, lastValueVisible: true, title: "%D",
+            priceLineVisible: false, lastValueVisible: false,
           }, paneIdx);
           sK.setData(kData);
           sD.setData(dData);
@@ -375,11 +392,15 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       }
     }
 
-    chart.timeScale().fitContent();
-  }, [bars, studies]);
+    if (!didFitContent.current) {
+      chart.timeScale().fitContent();
+      didFitContent.current = true;
+    }
+  }, [bars, studies, tfOffsetSec]);
 
   useImperativeHandle(ref, () => ({
     get candleSeries() { return candleSeriesRef.current; },
+    get volumeSeries() { return volumeSeriesRef.current; },
     get chart() { return chartRef.current; },
   }));
 

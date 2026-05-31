@@ -35,6 +35,8 @@ class MarketFeedManager:
     def __init__(self) -> None:
         self._adapters: dict[str, BrokerAdapter] = {}   # prefix → adapter
         self._subs: dict[str, set[WebSocket]] = defaultdict(set)
+        self._last_quote: dict[str, dict] = {}          # symbol → last quote dict
+        self._clients: set[WebSocket] = set()           # all active connections
         self._started = False
 
     def register(self, adapter: BrokerAdapter) -> None:
@@ -59,6 +61,8 @@ class MarketFeedManager:
                 await adapter.connect()
                 log.info(f"adapter_connected name={adapter.name}")
                 asyncio.create_task(self._fan_out(adapter))
+                # Push updated broker_status to all active WS clients
+                asyncio.create_task(self._broadcast_status())
                 return
             except Exception as exc:
                 wait = 2 ** attempt  # 1, 2, 4, 8, 16 seconds
@@ -79,10 +83,13 @@ class MarketFeedManager:
 
     async def _fan_out(self, adapter: BrokerAdapter) -> None:
         async for quote in adapter.quotes():
+            msg_data = {"type": "quote", **quote.to_dict()}
+            self._last_quote[quote.symbol] = msg_data
             ws_set = self._subs.get(quote.symbol, set())
             if not ws_set:
                 continue
-            msg = json.dumps({"type": "quote", **quote.to_dict()})
+            log.debug("fan_out %s ltp=%.2f clients=%d", quote.symbol, quote.ltp, len(ws_set))
+            msg = json.dumps(msg_data)
             dead: list[WebSocket] = []
             for ws in list(ws_set):
                 try:
@@ -91,6 +98,20 @@ class MarketFeedManager:
                     dead.append(ws)
             for ws in dead:
                 self._cleanup_ws(ws)
+
+    async def _broadcast_status(self) -> None:
+        """Push broker_status to all active WS clients."""
+        if not self._clients:
+            return
+        msg = json.dumps({"type": "broker_status", **self.status()})
+        dead: list[WebSocket] = []
+        for ws in list(self._clients):
+            try:
+                await ws.send_text(msg)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self._cleanup_ws(ws)
 
     async def add_client(self, ws: WebSocket, symbols: list[str]) -> None:
         for sym in symbols:
@@ -103,6 +124,13 @@ class MarketFeedManager:
                         await adapter.subscribe([sym])
                     except Exception as exc:
                         log.debug("subscribe_error", extra={"sym": sym, "error": str(exc)})
+            # Send last cached quote immediately so the client sees data right away
+            last = self._last_quote.get(sym)
+            if last:
+                try:
+                    await ws.send_text(json.dumps(last))
+                except Exception:
+                    pass
 
     async def remove_client(self, ws: WebSocket, symbols: list[str]) -> None:
         for sym in symbols:
@@ -116,14 +144,15 @@ class MarketFeedManager:
                         pass
 
     def _cleanup_ws(self, ws: WebSocket) -> None:
+        self._clients.discard(ws)
         for ws_set in self._subs.values():
             ws_set.discard(ws)
 
     def status(self) -> dict:
         seen: dict[str, str] = {}
         for adapter in set(self._adapters.values()):
-            connected = getattr(adapter, "_ws", None) is not None
-            seen[adapter.name] = "connected" if connected else "disconnected"
+            running = getattr(adapter, "_running", False)
+            seen[adapter.name] = "connected" if running else "disconnected"
         return seen
 
 
@@ -146,6 +175,7 @@ async def market_ws_endpoint(ws: WebSocket, token: str) -> None:
 
     await ws.accept()
     manager = get_manager()
+    manager._clients.add(ws)
     subscribed: set[str] = set()
 
     await ws.send_text(json.dumps({"type": "broker_status", **manager.status()}))
@@ -169,3 +199,4 @@ async def market_ws_endpoint(ws: WebSocket, token: str) -> None:
         pass
     finally:
         await manager.remove_client(ws, list(subscribed))
+        manager._clients.discard(ws)

@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = ""
     ADMIN_PASSWORD_HASH: SecretStr = SecretStr("")
     JWT_SECRET: str
-    JWT_EXPIRY_HOURS: int = 24
+    JWT_EXPIRY_HOURS: int = 168  # 7 days
 
     # LLM
     ANTHROPIC_API_KEY: SecretStr = SecretStr("")
