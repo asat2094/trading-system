@@ -242,7 +242,10 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
         <>
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: `1px solid ${TV.border}` }}>
-            <span style={{ color: TV.text, fontSize: 12, fontWeight: 600 }}>Indicators</span>
+            <div>
+              <span style={{ color: TV.text, fontSize: 12, fontWeight: 600 }}>Indicators</span>
+              <span style={{ color: TV.muted, fontSize: 10, marginLeft: 8 }}>+ applies to all charts · +1 focused only</span>
+            </div>
             <button
               onClick={onClose}
               style={{ background: "transparent", border: "none", color: TV.muted, cursor: "pointer", fontSize: 16, lineHeight: 1 }}
@@ -291,8 +294,8 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
                         <div style={{ fontSize: 10, color: TV.muted }}>{INDICATOR_DESCRIPTIONS[type]}</div>
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={() => addIndicator(paneId, type)} style={btnStyle} title="Add to focused chart">+</button>
-                        <button onClick={() => addIndicatorToAll(type)} style={{ ...btnStyle, fontSize: 9 }} title="Add to all charts">+All</button>
+                        <button onClick={() => addIndicatorToAll(type)} style={btnStyle} title="Add to all charts">+</button>
+                        <button onClick={() => addIndicator(paneId, type)} style={{ ...btnStyle, fontSize: 9, opacity: 0.6 }} title="Add to focused chart only">+1</button>
                       </div>
                     </div>
                   );
@@ -322,8 +325,8 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
                         <div style={{ fontSize: 10, color: TV.muted }}>{INDICATOR_DESCRIPTIONS[type]}</div>
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={() => addIndicator(paneId, type)} style={btnStyle} title="Add to focused chart">+</button>
-                        <button onClick={() => addIndicatorToAll(type)} style={{ ...btnStyle, fontSize: 9 }} title="Add to all charts">+All</button>
+                        <button onClick={() => addIndicatorToAll(type)} style={btnStyle} title="Add to all charts">+</button>
+                        <button onClick={() => addIndicator(paneId, type)} style={{ ...btnStyle, fontSize: 9, opacity: 0.6 }} title="Add to focused chart only">+1</button>
                       </div>
                     </div>
                   );
@@ -342,7 +345,7 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
           {indicators.length > 0 && (
             <div style={{ borderTop: `1px solid ${TV.border}`, padding: "8px 12px" }}>
               <div style={{ fontSize: 10, color: TV.muted, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
-                Active — this chart
+                Focused chart · ✕ this · ✕✕ all charts
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {indicators.map((ind) => (
