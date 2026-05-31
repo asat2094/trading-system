@@ -78,7 +78,7 @@ function SettingsLayer({ paneId, indicator, onBack, mode }: SettingsLayerProps) 
   });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, height: "100%", minHeight: 0 }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: `1px solid ${TV.border}`, flexShrink: 0 }}>
         <button
@@ -93,7 +93,7 @@ function SettingsLayer({ paneId, indicator, onBack, mode }: SettingsLayerProps) 
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, padding: "8px 12px", borderBottom: `1px solid ${TV.border}` }}>
+      <div style={{ display: "flex", gap: 4, padding: "8px 12px", borderBottom: `1px solid ${TV.border}`, flexShrink: 0 }}>
         {(["Inputs", "Style", "Visibility"] as SettingsTab[]).map((t) => (
           <button key={t} style={tabBtn(t)} onClick={() => setTab(t)}>{t}</button>
         ))}
@@ -190,7 +190,7 @@ function SettingsLayer({ paneId, indicator, onBack, mode }: SettingsLayerProps) 
       </div>
 
       {/* Footer buttons */}
-      <div style={{ display: "flex", gap: 8, padding: "10px 12px", borderTop: `1px solid ${TV.border}` }}>
+      <div style={{ display: "flex", gap: 8, padding: "10px 12px", borderTop: `1px solid ${TV.border}`, flexShrink: 0 }}>
         <button
           onClick={onBack}
           style={{
@@ -241,7 +241,7 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
 
   return (
     <div style={{
-      width: "100%", flex: 1, minHeight: 0, background: TV.bg,
+      width: "100%", flex: 1, height: "100%", minHeight: 0, background: TV.bg,
       borderLeft: `1px solid ${TV.border}`,
       display: "flex", flexDirection: "column",
     }}>
@@ -273,7 +273,7 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
           </div>
 
           {/* Search */}
-          <div style={{ padding: "8px 12px", borderBottom: `1px solid ${TV.border}` }}>
+          <div style={{ padding: "8px 12px", borderBottom: `1px solid ${TV.border}`, flexShrink: 0 }}>
             <input
               type="text"
               value={search}
@@ -361,11 +361,11 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
 
           {/* Active indicators footer */}
           {indicators.length > 0 && (
-            <div style={{ borderTop: `1px solid ${TV.border}`, padding: "8px 12px" }}>
+            <div style={{ borderTop: `1px solid ${TV.border}`, padding: "8px 12px", flexShrink: 0 }}>
               <div style={{ fontSize: 10, color: TV.muted, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
                 {mode === "global" ? "All charts — ⚙ edits all · ✕ removes all" : "This chart — ⚙ edits this · ✕ removes this"}
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, maxHeight: 120, overflowY: "auto" }}>
                 {indicators.map((ind) => (
                   <div
                     key={ind.id}

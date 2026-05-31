@@ -565,6 +565,7 @@ export default function ChartPane({ paneId, focused, onFocus }: Props) {
           position: "absolute", top: 0, right: 0, bottom: 0,
           width: 260, zIndex: 100,
           boxShadow: "-4px 0 16px rgba(0,0,0,0.6)",
+          display: "flex", flexDirection: "column",
         }}>
           <IndicatorPanel
             paneId={paneId}
