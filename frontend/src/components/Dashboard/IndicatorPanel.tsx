@@ -54,14 +54,10 @@ function SettingsLayer({ paneId, indicator, onBack, mode }: SettingsLayerProps) 
   const [draft, setDraft] = useState<IndicatorConfig>({ ...indicator, inputs: { ...indicator.inputs }, style: { ...indicator.style } });
 
   const handleApply = () => {
-    if (mode === "global") {
-      const patch = { inputs: draft.inputs, style: draft.style, visible: draft.visible };
-      if (draft.linkId) {
-        updateIndicatorByLinkId(draft.linkId, patch);
-      } else {
-        updateIndicatorByTypeAll(draft.type, patch);
-      }
+    if (mode === "global" && draft.linkId) {
+      updateIndicatorByLinkId(draft.linkId, { inputs: draft.inputs, style: draft.style, visible: draft.visible });
     } else {
+      // No linkId = added per-pane or old data — always update only this pane
       updateIndicator(paneId, draft);
     }
     onBack();
@@ -387,8 +383,8 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
                     </button>
                     <button
                       onClick={() => {
-                        if (mode === "global") {
-                          ind.linkId ? removeIndicatorByLinkId(ind.linkId) : removeIndicatorFromAll(ind.type);
+                        if (mode === "global" && ind.linkId) {
+                          removeIndicatorByLinkId(ind.linkId);
                         } else {
                           removeIndicator(paneId, ind.id);
                         }

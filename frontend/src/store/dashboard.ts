@@ -193,7 +193,7 @@ export const useDashboardStore = create<DashboardStore>()(
     }),
     {
       name: "trading-dashboard",
-      partialize: (s) => ({ paneCount: s.paneCount, panes: s.panes }),
+      partialize: (s) => ({ paneCount: s.paneCount, panes: s.panes, focusedPaneId: s.focusedPaneId }),
     }
   )
 );

@@ -133,7 +133,7 @@ function TopBar() {
 export default function Dashboard() {
   const [indicatorOpen, setIndicatorOpen] = useState(false);
   const { panes, focusedPaneId } = useDashboardStore();
-  const focusedPane = panes.find(p => p.id === (focusedPaneId ?? panes[0]?.id));
+  const focusedPane = panes.find(p => p.id === focusedPaneId) ?? panes[0];
 
   useEffect(() => {
     if (!isAuthenticated()) { window.location.href = "/login"; return; }
