@@ -20,11 +20,10 @@ function fmtVol(v: number): string {
 interface Props {
   symbol: string;
   timeframe: string;
-  onOpenIndicators?: () => void;
   lastBar?: { open: number; high: number; low: number; close: number; volume: number } | null;
 }
 
-export default function TickerBar({ symbol, timeframe, onOpenIndicators, lastBar }: Props) {
+export default function TickerBar({ symbol, timeframe, lastBar }: Props) {
   const quote   = useLiveQuotesStore((s) => s.quotes[symbol]);
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   const prevLtpRef = useRef<number | null>(null);
@@ -91,18 +90,6 @@ export default function TickerBar({ symbol, timeframe, onOpenIndicators, lastBar
         </span>
       )}
       <div style={{ flex: 1 }} />
-      {onOpenIndicators && (
-        <button
-          onClick={onOpenIndicators}
-          style={{
-            background: "transparent", border: `1px solid ${TV.border}`,
-            borderRadius: 3, color: TV.muted, fontSize: 10,
-            padding: "1px 6px", cursor: "pointer", flexShrink: 0,
-          }}
-        >
-          ⊕ Indicators
-        </button>
-      )}
     </div>
   );
 }

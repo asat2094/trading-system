@@ -84,10 +84,11 @@ interface DashboardStore {
   setPaneSymbol:   (paneId: string, symbol: string) => void;
   setPaneTimeframe:(paneId: string, tf: string) => void;
   setFocusedPane:  (paneId: string | null) => void;
-  addIndicator:      (paneId: string, type: IndicatorType) => void;
-  addIndicatorToAll: (type: IndicatorType) => void;
-  updateIndicator:   (paneId: string, ind: IndicatorConfig) => void;
-  removeIndicator:   (paneId: string, indicatorId: string) => void;
+  addIndicator:         (paneId: string, type: IndicatorType) => void;
+  addIndicatorToAll:    (type: IndicatorType) => void;
+  updateIndicator:      (paneId: string, ind: IndicatorConfig) => void;
+  removeIndicator:      (paneId: string, indicatorId: string) => void;
+  removeIndicatorFromAll: (type: IndicatorType) => void;
 }
 
 const EXTRA_SYMBOLS = [
@@ -151,6 +152,12 @@ export const useDashboardStore = create<DashboardStore>()(
             ? { ...p, indicators: p.indicators.filter((i) => i.id !== indicatorId) }
             : p
         ),
+      })),
+
+      removeIndicatorFromAll: (type) => set((s) => ({
+        panes: s.panes.map((p) => ({
+          ...p, indicators: p.indicators.filter((i) => i.type !== type),
+        })),
       })),
     }),
     {

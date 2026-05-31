@@ -202,7 +202,7 @@ function SettingsLayer({ paneId, indicator, onBack }: SettingsLayerProps) {
 }
 
 export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
-  const { addIndicator, addIndicatorToAll, removeIndicator } = useDashboardStore();
+  const { addIndicator, addIndicatorToAll, removeIndicator, removeIndicatorFromAll } = useDashboardStore();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<IndicatorConfig | null>(null);
 
@@ -228,11 +228,9 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
 
   return (
     <div style={{
-      position: "absolute", top: 0, right: 0, bottom: 0,
-      width: 280, background: TV.bg,
+      width: "100%", height: "100%", background: TV.bg,
       borderLeft: `1px solid ${TV.border}`,
       display: "flex", flexDirection: "column",
-      zIndex: 100, boxShadow: "-4px 0 16px rgba(0,0,0,0.5)",
     }}>
       {editing ? (
         <SettingsLayer
@@ -293,8 +291,8 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
                         <div style={{ fontSize: 10, color: TV.muted }}>{INDICATOR_DESCRIPTIONS[type]}</div>
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={() => addIndicator(paneId, type)} style={btnStyle} title="Add to this pane">+</button>
-                        <button onClick={() => addIndicatorToAll(type)} style={{ ...btnStyle, fontSize: 9 }} title="Add to all panes">+All</button>
+                        <button onClick={() => addIndicator(paneId, type)} style={btnStyle} title="Add to focused chart">+</button>
+                        <button onClick={() => addIndicatorToAll(type)} style={{ ...btnStyle, fontSize: 9 }} title="Add to all charts">+All</button>
                       </div>
                     </div>
                   );
@@ -324,8 +322,8 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
                         <div style={{ fontSize: 10, color: TV.muted }}>{INDICATOR_DESCRIPTIONS[type]}</div>
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={() => addIndicator(paneId, type)} style={btnStyle} title="Add to this pane">+</button>
-                        <button onClick={() => addIndicatorToAll(type)} style={{ ...btnStyle, fontSize: 9 }} title="Add to all panes">+All</button>
+                        <button onClick={() => addIndicator(paneId, type)} style={btnStyle} title="Add to focused chart">+</button>
+                        <button onClick={() => addIndicatorToAll(type)} style={{ ...btnStyle, fontSize: 9 }} title="Add to all charts">+All</button>
                       </div>
                     </div>
                   );
@@ -344,7 +342,7 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
           {indicators.length > 0 && (
             <div style={{ borderTop: `1px solid ${TV.border}`, padding: "8px 12px" }}>
               <div style={{ fontSize: 10, color: TV.muted, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
-                Active
+                Active — this chart
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                 {indicators.map((ind) => (
@@ -361,15 +359,24 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
                     </span>
                     <button
                       onClick={() => setEditing(ind)}
+                      title="Settings"
                       style={{ background: "transparent", border: "none", color: TV.muted, cursor: "pointer", fontSize: 10, padding: "0 1px", lineHeight: 1 }}
                     >
                       ⚙
                     </button>
                     <button
                       onClick={() => removeIndicator(paneId, ind.id)}
+                      title="Remove from this chart"
                       style={{ background: "transparent", border: "none", color: TV.down, cursor: "pointer", fontSize: 11, padding: "0 1px", lineHeight: 1 }}
                     >
                       ✕
+                    </button>
+                    <button
+                      onClick={() => removeIndicatorFromAll(ind.type)}
+                      title="Remove from all charts"
+                      style={{ background: "transparent", border: "none", color: TV.down, cursor: "pointer", fontSize: 9, padding: "0 1px", lineHeight: 1, opacity: 0.6 }}
+                    >
+                      ✕✕
                     </button>
                   </div>
                 ))}

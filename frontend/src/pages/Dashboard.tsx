@@ -3,16 +3,22 @@ import { useDashboardStore } from "../store/dashboard";
 import { useLiveQuotesStore } from "../store/liveQuotes";
 import MarketStatusBar from "../components/Dashboard/MarketStatusBar";
 import PaneGrid from "../components/Dashboard/PaneGrid";
+import IndicatorPanel from "../components/Dashboard/IndicatorPanel";
 import * as marketWs from "../lib/marketWs";
 import { apiClient, isAuthenticated } from "../api/client";
 
 const TV = { bg: "#0d0d1a", border: "#2a2e39", text: "#d1d4dc", muted: "#787b86", accent: "#2962ff" } as const;
 const PANE_COUNTS = [1, 2, 4, 6, 8] as const;
 
-function TopBar() {
+interface TopBarProps {
+  indicatorOpen: boolean;
+  onToggleIndicators: () => void;
+}
+
+function TopBar({ indicatorOpen, onToggleIndicators }: TopBarProps) {
   const { paneCount, setPaneCount } = useDashboardStore();
-  const brokerStatus    = useLiveQuotesStore((s) => s.brokerStatus);
-  const upstoxHasToken  = useLiveQuotesStore((s) => s.upstoxHasToken);
+  const brokerStatus   = useLiveQuotesStore((s) => s.brokerStatus);
+  const upstoxHasToken = useLiveQuotesStore((s) => s.upstoxHasToken);
   const isUpstoxConnected = brokerStatus["upstox"] === "connected";
   const isHlConnected     = brokerStatus["hyperliquid"] === "connected";
 
@@ -24,28 +30,18 @@ function TopBar() {
       "upstox-login",
       "width=500,height=700,resizable=yes"
     );
-    if (!popup) {
-      setPopupBlocked(true);
-    } else {
-      setPopupBlocked(false);
-    }
+    if (!popup) setPopupBlocked(true);
+    else setPopupBlocked(false);
   };
 
   const reconnectUpstox = async () => {
-    try {
-      await apiClient.post("/auth/upstox/reconnect");
-    } catch { /* ignore — adapter will retry */ }
+    try { await apiClient.post("/auth/upstox/reconnect"); } catch { /* ignore */ }
   };
 
   const reconnectHyperliquid = async () => {
-    try {
-      await apiClient.post("/auth/hyperliquid/reconnect");
-    } catch { /* ignore */ }
+    try { await apiClient.post("/auth/hyperliquid/reconnect"); } catch { /* ignore */ }
   };
 
-  // Listen for postMessage from Upstox OAuth popup.
-  // The callback page origin is http://127.0.0.1:8000 (matches _UPSTOX_REDIRECT),
-  // not http://localhost:8000 — must accept both.
   useEffect(() => {
     const ALLOWED = new Set(["http://localhost:8000", "http://127.0.0.1:8000"]);
     const handler = async (evt: MessageEvent) => {
@@ -55,10 +51,7 @@ function TopBar() {
           const { data } = await apiClient.get("/auth/upstox/status");
           const store = useLiveQuotesStore.getState();
           store.setUpstoxHasToken(data.connected);
-          store.setBrokerStatus({
-            ...store.brokerStatus,
-            upstox: data.connected ? "connected" : "disconnected",
-          });
+          store.setBrokerStatus({ ...store.brokerStatus, upstox: data.connected ? "connected" : "disconnected" });
         } catch { /* ignore */ }
       }
     };
@@ -89,13 +82,27 @@ function TopBar() {
             fontSize: 11, cursor: "pointer", outline: "none",
           }}
         >
-          {PANE_COUNTS.map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
+          {PANE_COUNTS.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </div>
 
       <div style={{ flex: 1 }} />
+
+      {/* Indicators toggle */}
+      <button
+        onClick={onToggleIndicators}
+        title="Toggle indicators panel"
+        style={{
+          background: indicatorOpen ? TV.accent + "22" : "transparent",
+          border: `1px solid ${indicatorOpen ? TV.accent : TV.border}`,
+          borderRadius: 4,
+          color: indicatorOpen ? TV.accent : TV.muted,
+          fontSize: 11, padding: "4px 10px",
+          cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+        }}
+      >
+        ⊕ Indicators
+      </button>
 
       {/* Hyperliquid status / reconnect */}
       <button
@@ -103,18 +110,13 @@ function TopBar() {
         style={{
           background: isHlConnected ? "#26a69a22" : "transparent",
           border: `1px solid ${isHlConnected ? "#26a69a" : TV.border}`,
-          borderRadius: 4,
-          color: isHlConnected ? "#26a69a" : TV.muted,
+          borderRadius: 4, color: isHlConnected ? "#26a69a" : TV.muted,
           fontSize: 11, padding: "4px 10px",
           cursor: isHlConnected ? "default" : "pointer",
           display: "flex", alignItems: "center", gap: 5,
         }}
       >
-        <span style={{
-          width: 6, height: 6, borderRadius: "50%",
-          background: isHlConnected ? "#26a69a" : "#787b86",
-          display: "inline-block",
-        }} />
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: isHlConnected ? "#26a69a" : "#787b86", display: "inline-block" }} />
         {isHlConnected ? "Hyperliquid" : "Reconnect HL"}
       </button>
 
@@ -150,28 +152,23 @@ function TopBar() {
 }
 
 export default function Dashboard() {
+  const [indicatorOpen, setIndicatorOpen] = useState(false);
+  const { panes, focusedPaneId } = useDashboardStore();
+  const focusedPane = panes.find(p => p.id === (focusedPaneId ?? panes[0]?.id));
+
   useEffect(() => {
-    if (!isAuthenticated()) {
-      window.location.href = "/login";
-      return;
-    }
+    if (!isAuthenticated()) { window.location.href = "/login"; return; }
     const token = localStorage.getItem("access_token") ?? "";
     marketWs.connect(token);
   }, []);
 
-  // Poll Upstox token status on mount + every 30s.
-  // Populates upstoxHasToken so the button shows "Reconnect" after page refresh
-  // when Redis still holds a token.
   useEffect(() => {
     const checkStatus = async () => {
       try {
         const { data } = await apiClient.get("/auth/upstox/status");
         const store = useLiveQuotesStore.getState();
         store.setUpstoxHasToken(data.connected);
-        if (!data.connected) {
-          // Token gone — reflect in broker status too
-          store.setBrokerStatus({ ...store.brokerStatus, upstox: "disconnected" });
-        }
+        if (!data.connected) store.setBrokerStatus({ ...store.brokerStatus, upstox: "disconnected" });
       } catch { /* ignore */ }
     };
     checkStatus();
@@ -181,9 +178,32 @@ export default function Dashboard() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: TV.bg, overflow: "hidden" }}>
-      <TopBar />
+      <TopBar
+        indicatorOpen={indicatorOpen}
+        onToggleIndicators={() => setIndicatorOpen(v => !v)}
+      />
       <MarketStatusBar />
-      <PaneGrid />
+
+      {/* Main content: pane grid + optional global indicator side panel */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        <PaneGrid />
+
+        {indicatorOpen && (
+          <div style={{
+            width: 280, flexShrink: 0,
+            borderLeft: `1px solid ${TV.border}`,
+            display: "flex", flexDirection: "column",
+            overflow: "hidden",
+            background: "#1e222d",
+          }}>
+            <IndicatorPanel
+              paneId={focusedPane?.id ?? panes[0]?.id ?? ""}
+              indicators={focusedPane?.indicators ?? []}
+              onClose={() => setIndicatorOpen(false)}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
