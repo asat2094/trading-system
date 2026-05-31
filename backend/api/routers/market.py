@@ -180,6 +180,17 @@ async def upstox_reconnect(user: User = Depends(get_current_user)):
         raise HTTPException(500, f"Reconnect failed: {exc}") from exc
 
 
+@router.post("/auth/hyperliquid/reconnect")
+async def hyperliquid_reconnect(user: User = Depends(get_current_user)):
+    """Reconnect Hyperliquid WS adapter."""
+    try:
+        from api.market_ws import get_manager
+        await get_manager().reconnect_adapter("hyperliquid")
+        return {"status": "reconnecting"}
+    except Exception as exc:
+        raise HTTPException(500, f"Reconnect failed: {exc}") from exc
+
+
 @router.get("/auth/upstox/status")
 async def upstox_status(user: User = Depends(get_current_user)):
     try:

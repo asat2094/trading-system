@@ -56,8 +56,16 @@ function indiaStatus(): MarketInfo {
     detail = `closes in ${fmtCountdown(CLOSE_M - min)}`;
   } else {
     status = "CLOSED";
-    const next = OPEN_M + (day === 5 ? 3 * 1440 : 1440) - min;
-    detail = `opens ${day === 5 ? "Mon" : dayName(new Date(d.getTime() + 86400_000))} in ${fmtCountdown(next)}`;
+    if (min < OPEN_M) {
+      // Early morning — opens later today
+      detail = `opens in ${fmtCountdown(OPEN_M - min)}`;
+    } else if (day === 5) {
+      // Friday after close — opens Monday
+      detail = `opens Mon in ${fmtCountdown(OPEN_M + 3 * 1440 - min)}`;
+    } else {
+      // Weekday after close — opens tomorrow
+      detail = `opens ${dayName(new Date(d.getTime() + 86400_000))} in ${fmtCountdown(OPEN_M + 1440 - min)}`;
+    }
   }
 
   return {

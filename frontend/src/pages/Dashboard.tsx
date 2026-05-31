@@ -14,6 +14,7 @@ function TopBar() {
   const brokerStatus    = useLiveQuotesStore((s) => s.brokerStatus);
   const upstoxHasToken  = useLiveQuotesStore((s) => s.upstoxHasToken);
   const isUpstoxConnected = brokerStatus["upstox"] === "connected";
+  const isHlConnected     = brokerStatus["hyperliquid"] === "connected";
 
   const [popupBlocked, setPopupBlocked] = useState(false);
 
@@ -30,11 +31,16 @@ function TopBar() {
     }
   };
 
-  // When token exists but adapter is disconnected, reconnect without re-OAuth
   const reconnectUpstox = async () => {
     try {
       await apiClient.post("/auth/upstox/reconnect");
     } catch { /* ignore — adapter will retry */ }
+  };
+
+  const reconnectHyperliquid = async () => {
+    try {
+      await apiClient.post("/auth/hyperliquid/reconnect");
+    } catch { /* ignore */ }
   };
 
   // Listen for postMessage from Upstox OAuth popup.
@@ -91,17 +97,26 @@ function TopBar() {
 
       <div style={{ flex: 1 }} />
 
-      {/* Hyperliquid status */}
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <span
-          style={{
-            width: 7, height: 7, borderRadius: "50%",
-            background: brokerStatus["hyperliquid"] === "connected" ? "#26a69a" : "#787b86",
-            display: "inline-block",
-          }}
-        />
-        <span style={{ fontSize: 11, color: TV.muted }}>Hyperliquid</span>
-      </div>
+      {/* Hyperliquid status / reconnect */}
+      <button
+        onClick={isHlConnected ? undefined : reconnectHyperliquid}
+        style={{
+          background: isHlConnected ? "#26a69a22" : "transparent",
+          border: `1px solid ${isHlConnected ? "#26a69a" : TV.border}`,
+          borderRadius: 4,
+          color: isHlConnected ? "#26a69a" : TV.muted,
+          fontSize: 11, padding: "4px 10px",
+          cursor: isHlConnected ? "default" : "pointer",
+          display: "flex", alignItems: "center", gap: 5,
+        }}
+      >
+        <span style={{
+          width: 6, height: 6, borderRadius: "50%",
+          background: isHlConnected ? "#26a69a" : "#787b86",
+          display: "inline-block",
+        }} />
+        {isHlConnected ? "Hyperliquid" : "Reconnect HL"}
+      </button>
 
       {/* Connect / Reconnect Upstox */}
       <button
