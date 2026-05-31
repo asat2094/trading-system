@@ -318,8 +318,14 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
                         <div style={{ fontSize: 10, color: TV.muted }}>{INDICATOR_DESCRIPTIONS[type]}</div>
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={() => local ? local.onAdd(type) : addIndicatorToAll(type)} style={btnStyle} title={local ? "Add indicator" : "Add to all charts"}>+</button>
-                        {!local && <button onClick={() => addIndicator(paneId, type)} style={{ ...btnStyle, fontSize: 9, opacity: 0.6 }} title="Add to focused chart only">+1</button>}
+                        {mode === "global" ? (
+                          <>
+                            <button onClick={() => addIndicatorToAll(type)} style={btnStyle} title="Add to all charts">+</button>
+                            <button onClick={() => addIndicator(paneId, type)} style={{ ...btnStyle, fontSize: 9, opacity: 0.6 }} title="Add to focused chart only">+1</button>
+                          </>
+                        ) : (
+                          <button onClick={() => local ? local.onAdd(type) : addIndicator(paneId, type)} style={btnStyle} title="Add to this chart">+</button>
+                        )}
                       </div>
                     </div>
                   );
@@ -349,8 +355,14 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
                         <div style={{ fontSize: 10, color: TV.muted }}>{INDICATOR_DESCRIPTIONS[type]}</div>
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={() => local ? local.onAdd(type) : addIndicatorToAll(type)} style={btnStyle} title={local ? "Add indicator" : "Add to all charts"}>+</button>
-                        {!local && <button onClick={() => addIndicator(paneId, type)} style={{ ...btnStyle, fontSize: 9, opacity: 0.6 }} title="Add to focused chart only">+1</button>}
+                        {mode === "global" ? (
+                          <>
+                            <button onClick={() => addIndicatorToAll(type)} style={btnStyle} title="Add to all charts">+</button>
+                            <button onClick={() => addIndicator(paneId, type)} style={{ ...btnStyle, fontSize: 9, opacity: 0.6 }} title="Add to focused chart only">+1</button>
+                          </>
+                        ) : (
+                          <button onClick={() => local ? local.onAdd(type) : addIndicator(paneId, type)} style={btnStyle} title="Add to this chart">+</button>
+                        )}
                       </div>
                     </div>
                   );
