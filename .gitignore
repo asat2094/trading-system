@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 *.pyo
 .venv/
+venv/
 *.egg-info/
 dist/
 build/
@@ -9,3 +10,7 @@ build/
 .DS_Store
 # Added by code-review-graph
 .code-review-graph/
+
+# restart.sh runtime dirs
+.pids/
+.logs/
