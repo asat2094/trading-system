@@ -21,6 +21,7 @@ import { tsToUnix } from "../../lib/time";
 import DrawingDrawer from "../Dashboard/DrawingToolbar";
 import type { DrawMode, Drawing } from "../Dashboard/DrawingToolbar";
 import IndicatorPanel from "../Dashboard/IndicatorPanel";
+import TickerBar from "../Dashboard/TickerBar";
 import * as marketWs from "../../lib/marketWs";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -252,36 +253,13 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
       }}
       onClick={onFocus}
     >
-      {/* Ticker bar with ⊕ indicator toggle */}
-      <div style={{
-        borderBottom: `1px solid ${TV.border}`, padding: "3px 8px",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        fontSize: 11, flexShrink: 0, background: "#1a1e2e",
-      }}>
-        <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#d1d4dc" }}>
-          {symbol.split(":")[1] ?? symbol}
-        </span>
-        <span style={{ color: TV.muted, fontSize: 10, marginLeft: 6 }}>{timeframe}</span>
-        {liveBar && (
-          <span style={{
-            fontFamily: "monospace", fontWeight: 700, marginLeft: 10,
-            color: liveBar.close >= liveBar.open ? "#26a69a" : "#ef5350",
-          }}>
-            {liveBar.close.toFixed(2)}
-          </span>
-        )}
-        <div style={{ flex: 1 }} />
-        <button
-          onClick={(e) => { e.stopPropagation(); setPanelOpen((v) => !v); }}
-          style={{
-            background: "transparent", border: `1px solid ${TV.border}`,
-            borderRadius: 3, color: TV.muted, fontSize: 10,
-            padding: "1px 6px", cursor: "pointer",
-          }}
-        >
-          ⊕
-        </button>
-      </div>
+      {/* Ticker bar — symbol, OHLCV, live flash, ⊕ indicator toggle */}
+      <TickerBar
+        symbol={symbol}
+        timeframe={timeframe}
+        lastBar={liveBar ?? (bars.length > 0 ? bars[bars.length - 1] : null)}
+        onOpenIndicators={() => setPanelOpen((v) => !v)}
+      />
 
       {/* Content: drawing drawer + chart */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
