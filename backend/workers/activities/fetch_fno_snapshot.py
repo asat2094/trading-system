@@ -141,6 +141,8 @@ def run_fno_snapshot(symbol: str = "NIFTY", strikes: int = 10) -> dict:
       2. get_quotes → OI + OHLC for (strikes*2+1) × 2 option instruments
 
     Delta OI computed via Redis baselines (set on first fetch each trading day).
+    Results are cached in Redis for 5 minutes — if Kite MCP is down/expired,
+    serves stale data with `stale: true` flag.
 
     Returns
     -------
@@ -150,8 +152,21 @@ def run_fno_snapshot(symbol: str = "NIFTY", strikes: int = 10) -> dict:
     today  = date.today()
     expiry = _nearest_monthly_expiry(today)
     prefix = _expiry_prefix(expiry)
-    mc     = _FnoMCPClient()
     rdb    = _redis()
+
+    cache_key = f"fno:snapshot:{symbol}:{expiry}"
+
+    try:
+        mc = _FnoMCPClient()
+    except RuntimeError:
+        # No session file — try cache
+        cached = rdb.get(cache_key)
+        rdb.close()
+        if cached:
+            result = json.loads(cached)
+            result["stale"] = True
+            return result
+        raise
 
     try:
         # --- call 1: spot ---
@@ -230,7 +245,23 @@ def run_fno_snapshot(symbol: str = "NIFTY", strikes: int = 10) -> dict:
             "total_pe_oi": total_pe_oi,
             "strikes":     strikes_data,
             "fetched_at":  datetime.now(timezone.utc).isoformat(),
+            "stale":       False,
         }
+
+        # Cache for 5 minutes
+        try:
+            rdb.setex(cache_key, 300, json.dumps(result, default=str))
+        except Exception:
+            pass
+
+    except Exception:
+        # MCP call failed — try cache
+        cached = rdb.get(cache_key)
+        if cached:
+            result = json.loads(cached)
+            result["stale"] = True
+            return result
+        raise
     finally:
         mc.close()
         rdb.close()

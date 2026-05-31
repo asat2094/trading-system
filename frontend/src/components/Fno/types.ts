@@ -28,4 +28,5 @@ export interface FnoSnapshot {
   total_pe_oi: number;
   strikes: StrikeRow[];
   fetched_at: string;   // ISO timestamp
+  stale?: boolean;      // true when served from cache (Kite MCP unavailable)
 }

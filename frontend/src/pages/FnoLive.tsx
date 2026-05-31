@@ -64,6 +64,11 @@ export default function FnoLive() {
             Expiry: {snapshot.expiry}
             &nbsp;·&nbsp;
             Fetched: {new Date(snapshot.fetched_at).toLocaleTimeString("en-IN")}
+            {snapshot.stale && (
+              <span style={{ color: TV.warn, marginLeft: 6, fontWeight: 600 }}>
+                ⚠ Cached (Kite MCP unavailable)
+              </span>
+            )}
           </span>
         )}
 
