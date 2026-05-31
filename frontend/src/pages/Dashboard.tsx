@@ -10,12 +10,7 @@ import { apiClient, isAuthenticated } from "../api/client";
 const TV = { bg: "#0d0d1a", border: "#2a2e39", text: "#d1d4dc", muted: "#787b86", accent: "#2962ff" } as const;
 const PANE_COUNTS = [1, 2, 4, 6, 8] as const;
 
-interface TopBarProps {
-  indicatorOpen: boolean;
-  onToggleIndicators: () => void;
-}
-
-function TopBar({ indicatorOpen, onToggleIndicators }: TopBarProps) {
+function TopBar() {
   const { paneCount, setPaneCount } = useDashboardStore();
   const brokerStatus   = useLiveQuotesStore((s) => s.brokerStatus);
   const upstoxHasToken = useLiveQuotesStore((s) => s.upstoxHasToken);
@@ -87,22 +82,6 @@ function TopBar({ indicatorOpen, onToggleIndicators }: TopBarProps) {
       </div>
 
       <div style={{ flex: 1 }} />
-
-      {/* Indicators toggle */}
-      <button
-        onClick={onToggleIndicators}
-        title="Toggle indicators panel"
-        style={{
-          background: indicatorOpen ? TV.accent + "22" : "transparent",
-          border: `1px solid ${indicatorOpen ? TV.accent : TV.border}`,
-          borderRadius: 4,
-          color: indicatorOpen ? TV.accent : TV.muted,
-          fontSize: 11, padding: "4px 10px",
-          cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
-        }}
-      >
-        ⊕ Indicators
-      </button>
 
       {/* Hyperliquid status / reconnect */}
       <button
@@ -178,11 +157,11 @@ export default function Dashboard() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: TV.bg, overflow: "hidden" }}>
-      <TopBar
-        indicatorOpen={indicatorOpen}
+      <TopBar />
+      <MarketStatusBar
         onToggleIndicators={() => setIndicatorOpen(v => !v)}
+        indicatorOpen={indicatorOpen}
       />
-      <MarketStatusBar />
 
       {/* Main content: pane grid + optional global indicator side panel */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
@@ -191,10 +170,8 @@ export default function Dashboard() {
         {indicatorOpen && (
           <div style={{
             width: 280, flexShrink: 0,
-            borderLeft: `1px solid ${TV.border}`,
             display: "flex", flexDirection: "column",
             overflow: "hidden",
-            background: "#1e222d",
           }}>
             <IndicatorPanel
               paneId={focusedPane?.id ?? panes[0]?.id ?? ""}

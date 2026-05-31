@@ -73,9 +73,9 @@ function SettingsLayer({ paneId, indicator, onBack, mode }: SettingsLayerProps) 
   });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: `1px solid ${TV.border}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: `1px solid ${TV.border}`, flexShrink: 0 }}>
         <button
           onClick={onBack}
           style={{ background: "transparent", border: "none", color: TV.muted, cursor: "pointer", fontSize: 14, padding: "0 4px" }}
@@ -236,7 +236,7 @@ export default function IndicatorPanel({ paneId, indicators, onClose, mode = "in
 
   return (
     <div style={{
-      width: "100%", height: "100%", background: TV.bg,
+      width: "100%", flex: 1, minHeight: 0, background: TV.bg,
       borderLeft: `1px solid ${TV.border}`,
       display: "flex", flexDirection: "column",
     }}>
