@@ -112,9 +112,8 @@ export default function ChartPane({ paneId, focused, onFocus }: Props) {
   ): Promise<Bar[]> => {
     const isExchange = sym.startsWith("NSE:") || sym.startsWith("BSE:");
     if (isExchange) {
-      const ticker = sym.split(":")[1];
-      const { data } = await apiClient.get(`/technical/ohlcv/${ticker}`, {
-        params: { tf, from_dt: fromDt, to_dt: toDt },
+      const { data } = await apiClient.get("/technical/candles", {
+        params: { symbol: sym, tf, from_dt: fromDt, to_dt: toDt },
       });
       return (data.rows ?? []) as Bar[];
     } else {

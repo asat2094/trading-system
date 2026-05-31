@@ -21,11 +21,14 @@ interface LiveQuotesStore {
   setQuote: (q: Omit<LiveQuote, "prevLtp">) => void;
   brokerStatus: Record<string, string>;
   setBrokerStatus: (status: Record<string, string>) => void;
+  upstoxHasToken: boolean;
+  setUpstoxHasToken: (v: boolean) => void;
 }
 
-export const useLiveQuotesStore = create<LiveQuotesStore>()((set, get) => ({
+export const useLiveQuotesStore = create<LiveQuotesStore>()((set) => ({
   quotes: {},
   brokerStatus: {},
+  upstoxHasToken: false,
 
   setQuote: (q) => set((s) => {
     const prev = s.quotes[q.symbol];
@@ -38,4 +41,5 @@ export const useLiveQuotesStore = create<LiveQuotesStore>()((set, get) => ({
   }),
 
   setBrokerStatus: (status) => set({ brokerStatus: status }),
+  setUpstoxHasToken: (v) => set({ upstoxHasToken: v }),
 }));

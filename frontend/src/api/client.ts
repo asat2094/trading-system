@@ -38,5 +38,16 @@ export function logout(): void {
 }
 
 export function isAuthenticated(): boolean {
-  return !!localStorage.getItem("access_token");
+  const token = localStorage.getItem("access_token");
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      localStorage.removeItem("access_token");
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }

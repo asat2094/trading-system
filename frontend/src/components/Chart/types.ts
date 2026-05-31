@@ -16,7 +16,7 @@ export type StudyConfig =
 export const OVERLAY_TYPES: StudyType[] = ["EMA", "SMA", "BB", "VWAP", "VolumeProfile", "FVG"];
 export const OSCILLATOR_TYPES: StudyType[] = ["RSI", "MACD", "Stoch"];
 
-export const STUDY_DEFAULTS: Record<StudyType, Omit<StudyConfig, "id">> = {
+export const STUDY_DEFAULTS: { [K in StudyType]: Omit<Extract<StudyConfig, { type: K }>, "id"> } = {
   EMA:           { type: "EMA",           period: 20, color: "#f7c948" },
   SMA:           { type: "SMA",           period: 20, color: "#4caf50" },
   BB:            { type: "BB",            period: 20, std: 2, upperColor: "#2196f3", midColor: "#888888", lowerColor: "#2196f3" },

@@ -18,10 +18,43 @@ from temporalio import activity
 
 from workers.activities.fetch_kitemcp_1min import _kite_limiter
 
-NIFTY_STEP   = 50
-NSE_NIFTY    = "NSE:NIFTY 50"
-IST          = timezone(timedelta(hours=5, minutes=30))
+IST             = timezone(timedelta(hours=5, minutes=30))
 _REDIS_FALLBACK = "redis://localhost:6379"
+
+# Per-symbol config: spot instrument, strike step, option exchange, expiry type
+# expiry_type: "weekly_thu" | "weekly_tue" | "monthly_thu"
+_SYMBOL_CONFIGS: dict[str, dict] = {
+    "NIFTY": {
+        "spot": "NSE:NIFTY 50",
+        "step": 50,
+        "exchange": "NFO",
+        "expiry_type": "weekly_tue",    # every Tuesday
+    },
+    "BANKNIFTY": {
+        "spot": "NSE:NIFTY BANK",
+        "step": 100,
+        "exchange": "NFO",
+        "expiry_type": "monthly_tue",   # last Tuesday of month
+    },
+    "MIDCPNIFTY": {
+        "spot": "NSE:NIFTY MID SELECT",
+        "step": 25,
+        "exchange": "NFO",
+        "expiry_type": "monthly_tue",   # last Tuesday of month
+    },
+    "SENSEX": {
+        "spot": "BSE:SENSEX",
+        "step": 100,
+        "exchange": "BFO",
+        "expiry_type": "weekly_thu",    # every Thursday
+    },
+}
+
+# Kite 1-char month codes used in weekly option symbols
+_MONTH_CHAR = {
+    1:"1", 2:"2", 3:"3", 4:"4", 5:"5", 6:"6",
+    7:"7", 8:"8", 9:"9", 10:"O", 11:"N", 12:"D",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -80,26 +113,74 @@ def _redis() -> redis_lib.Redis:
     return redis_lib.from_url(url, decode_responses=True)
 
 
-def _nearest_monthly_expiry(today: date) -> date:
-    """Return last Thursday of current month; roll to next month if already expired."""
-    def _last_thursday(y: int, m: int) -> date:
-        if m == 12:
-            last = date(y + 1, 1, 1) - timedelta(days=1)
-        else:
-            last = date(y, m + 1, 1) - timedelta(days=1)
-        return last - timedelta(days=(last.weekday() - 3) % 7)
+def _fallback_expiries(symbol: str, count: int = 8) -> list[str]:
+    """Compute upcoming expiries from rule — used when Kite MCP is unavailable."""
+    cfg = _SYMBOL_CONFIGS.get(symbol, _SYMBOL_CONFIGS["NIFTY"])
+    expiry_type = cfg["expiry_type"]
+    today = date.today()
+    results: list[str] = []
 
-    exp = _last_thursday(today.year, today.month)
+    if expiry_type in ("weekly_tue", "weekly_thu"):
+        target = 1 if expiry_type == "weekly_tue" else 3
+        days = (target - today.weekday()) % 7 or 7
+        d = today + timedelta(days=days)
+        for _ in range(count):
+            results.append(str(d))
+            d += timedelta(weeks=1)
+    else:
+        target = 1 if expiry_type == "monthly_tue" else 3
+        y, m = today.year, today.month
+        while len(results) < count:
+            exp = _last_weekday_of_month(y, m, target)
+            if exp >= today:
+                results.append(str(exp))
+            m += 1
+            if m > 12:
+                m = 1; y += 1
+
+    return results
+
+
+def _last_weekday_of_month(y: int, m: int, weekday: int) -> date:
+    """Last occurrence of weekday (0=Mon..6=Sun) in given month."""
+    if m == 12:
+        last = date(y + 1, 1, 1) - timedelta(days=1)
+    else:
+        last = date(y, m + 1, 1) - timedelta(days=1)
+    return last - timedelta(days=(last.weekday() - weekday) % 7)
+
+
+def _nearest_expiry(symbol: str, today: date) -> date:
+    """Return next expiry for the given symbol based on its expiry_type."""
+    cfg = _SYMBOL_CONFIGS.get(symbol, _SYMBOL_CONFIGS["NIFTY"])
+    expiry_type = cfg["expiry_type"]
+
+    # Weekly expiries: find next occurrence of target weekday
+    if expiry_type in ("weekly_tue", "weekly_thu"):
+        target = 1 if expiry_type == "weekly_tue" else 3  # 1=Tue, 3=Thu
+        days = (target - today.weekday()) % 7 or 7
+        return today + timedelta(days=days)
+
+    # Monthly expiries: last Tuesday (monthly_tue) or last Thursday (monthly_thu)
+    target = 1 if expiry_type == "monthly_tue" else 3
+    exp = _last_weekday_of_month(today.year, today.month, target)
     if exp < today:
         nm = today.month % 12 + 1
         ny = today.year + (1 if today.month == 12 else 0)
-        exp = _last_thursday(ny, nm)
+        exp = _last_weekday_of_month(ny, nm, target)
     return exp
 
 
-def _expiry_prefix(expiry: date) -> str:
-    """date(2026, 6, 25) -> 'NIFTY26JUN'"""
-    return f"NIFTY{expiry.strftime('%y%b').upper()}"
+def _expiry_prefix(symbol_name: str, expiry: date, is_monthly: bool) -> str:
+    """Build Kite option instrument prefix.
+
+    Monthly: NIFTY26JUN  (YYMMM 3-char month)
+    Weekly:  NIFTY26605  (YY + 1-char month + 2-digit day)
+    """
+    if is_monthly:
+        return f"{symbol_name}{expiry.strftime('%y%b').upper()}"
+    char = _MONTH_CHAR[expiry.month]
+    return f"{symbol_name}{expiry.strftime('%y')}{char}{expiry.day:02d}"
 
 
 def _secs_to_ist_midnight() -> int:
@@ -129,15 +210,99 @@ def _compute_ratios(
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Expiry list
+# ---------------------------------------------------------------------------
+
+def run_expiries(symbol: str = "NIFTY") -> dict:
+    """Return available option expiry dates for the given symbol.
+
+    Tries Kite MCP search_instruments first; falls back to rule-based computation.
+    Results cached in Redis for 1 hour.
+    """
+    today = date.today()
+    cfg   = _SYMBOL_CONFIGS.get(symbol, _SYMBOL_CONFIGS["NIFTY"])
+    exchange = cfg["exchange"]
+    rdb   = _redis()
+    cache_key = f"fno:expiries:{symbol}"
+
+    cached = rdb.get(cache_key)
+    if cached:
+        rdb.close()
+        return json.loads(cached)
+
+    try:
+        mc = _FnoMCPClient()
+    except RuntimeError:
+        rdb.close()
+        return {"expiries": _fallback_expiries(symbol), "source": "computed"}
+
+    try:
+        raw = mc.call_tool("search_instruments", {
+            "query": symbol,
+            "exchange": exchange,
+        })
+
+        # raw may be a list directly or wrapped in a dict
+        if isinstance(raw, list):
+            instruments = raw
+        elif isinstance(raw, dict):
+            instruments = (
+                raw.get("instruments") or raw.get("data") or
+                raw.get("result") or []
+            )
+        else:
+            instruments = []
+
+        expiries: set[str] = set()
+        for inst in instruments:
+            if not isinstance(inst, dict):
+                continue
+            itype    = inst.get("instrument_type", "")
+            name     = (inst.get("name") or inst.get("underlying") or "").strip()
+            exp_raw  = inst.get("expiry") or inst.get("expiry_date") or ""
+            if itype not in ("CE", "PE"):
+                continue
+            if name.upper() != symbol.upper():
+                continue
+            exp_str = str(exp_raw)[:10]
+            try:
+                exp_date = date.fromisoformat(exp_str)
+                if exp_date >= today:
+                    expiries.add(exp_str)
+            except ValueError:
+                continue
+
+        if not expiries:
+            result = {"expiries": _fallback_expiries(symbol), "source": "computed"}
+        else:
+            result = {"expiries": sorted(expiries), "source": "kitemcp"}
+
+        rdb.setex(cache_key, 3600, json.dumps(result))
+        return result
+
+    except Exception as exc:
+        result = {
+            "expiries": _fallback_expiries(symbol),
+            "source": "computed",
+            "error": str(exc),
+        }
+        return result
+    finally:
+        mc.close()
+        rdb.close()
+
+
 # Core snapshot logic
 # ---------------------------------------------------------------------------
 
-def run_fno_snapshot(symbol: str = "NIFTY", strikes: int = 10) -> dict:
+def run_fno_snapshot(symbol: str = "NIFTY", strikes: int = 10,
+                     expiry_override: str | None = None) -> dict:
     """
-    Fetch FnO snapshot for NIFTY.
+    Fetch FnO snapshot for the given index symbol.
 
     Makes exactly 2 Kite MCP calls:
-      1. get_ltp   → NIFTY 50 spot price
+      1. get_ltp   → spot price
       2. get_quotes → OI + OHLC for (strikes*2+1) × 2 option instruments
 
     Delta OI computed via Redis baselines (set on first fetch each trading day).
@@ -149,9 +314,22 @@ def run_fno_snapshot(symbol: str = "NIFTY", strikes: int = 10) -> dict:
     dict: symbol, spot, expiry, atm_strike, pcr, pcdr, pcd,
           total_ce_oi, total_pe_oi, strikes[{strike, ce, pe}], fetched_at
     """
-    today  = date.today()
-    expiry = _nearest_monthly_expiry(today)
-    prefix = _expiry_prefix(expiry)
+    cfg = _SYMBOL_CONFIGS.get(symbol, _SYMBOL_CONFIGS["NIFTY"])
+    step         = cfg["step"]
+    spot_instr   = cfg["spot"]
+    exchange     = cfg["exchange"]
+    is_monthly   = cfg["expiry_type"].startswith("monthly")
+
+    today = date.today()
+    if expiry_override:
+        try:
+            expiry = date.fromisoformat(expiry_override)
+        except ValueError:
+            expiry = _nearest_expiry(symbol, today)
+    else:
+        expiry = _nearest_expiry(symbol, today)
+
+    prefix = _expiry_prefix(symbol, expiry, is_monthly)
     rdb    = _redis()
 
     cache_key = f"fno:snapshot:{symbol}:{expiry}"
@@ -170,15 +348,15 @@ def run_fno_snapshot(symbol: str = "NIFTY", strikes: int = 10) -> dict:
 
     try:
         # --- call 1: spot ---
-        spot_data = mc.call_tool("get_ltp", {"instruments": [NSE_NIFTY]})
-        spot = float((spot_data.get(NSE_NIFTY) or {}).get("last_price", 0))
+        spot_data = mc.call_tool("get_ltp", {"instruments": [spot_instr]})
+        spot = float((spot_data.get(spot_instr) or {}).get("last_price", 0))
         if spot <= 0:
-            raise RuntimeError(f"Could not fetch NIFTY spot. Response: {spot_data}")
+            raise RuntimeError(f"Could not fetch {symbol} spot. Response: {spot_data}")
 
-        atm         = round(spot / NIFTY_STEP) * NIFTY_STEP
-        strike_list = [int(atm + i * NIFTY_STEP) for i in range(-strikes, strikes + 1)]
+        atm         = round(spot / step) * step
+        strike_list = [int(atm + i * step) for i in range(-strikes, strikes + 1)]
         instruments = [
-            f"NFO:{prefix}{s}{t}"
+            f"{exchange}:{prefix}{s}{t}"
             for s in strike_list
             for t in ("CE", "PE")
         ]
@@ -192,9 +370,13 @@ def run_fno_snapshot(symbol: str = "NIFTY", strikes: int = 10) -> dict:
         total_ce_oi = total_pe_oi = total_ce_delta = total_pe_delta = 0.0
 
         for s in strike_list:
-            row: dict[str, Any] = {"strike": s}
+            row: dict[str, Any] = {
+                "strike": s,
+                "ce_symbol": f"{exchange}:{prefix}{s}CE",
+                "pe_symbol": f"{exchange}:{prefix}{s}PE",
+            }
             for typ in ("CE", "PE"):
-                sym  = f"NFO:{prefix}{s}{typ}"
+                sym  = f"{exchange}:{prefix}{s}{typ}"
                 q    = quotes.get(sym) or {}
                 if not q:
                     row[typ.lower()] = None

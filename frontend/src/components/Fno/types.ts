@@ -14,6 +14,8 @@ export interface StrikeRow {
   strike: number;
   ce: OptionSide | null;
   pe: OptionSide | null;
+  ce_symbol: string;   // e.g. "NFO:NIFTY26JUN24500CE"
+  pe_symbol: string;   // e.g. "NFO:NIFTY26JUN24500PE"
 }
 
 export interface FnoSnapshot {

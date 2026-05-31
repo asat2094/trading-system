@@ -202,11 +202,14 @@ function SettingsLayer({ paneId, indicator, onBack }: SettingsLayerProps) {
 }
 
 export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
-  const { addIndicator, removeIndicator } = useDashboardStore();
+  const { addIndicator, addIndicatorToAll, removeIndicator } = useDashboardStore();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<IndicatorConfig | null>(null);
 
-  const activeIds = new Set(indicators.map((i) => i.type));
+  const countByType = indicators.reduce<Record<string, number>>((acc, i) => {
+    acc[i.type] = (acc[i.type] ?? 0) + 1;
+    return acc;
+  }, {});
   const q = search.trim().toLowerCase();
 
   const filterType = (type: IndicatorType) =>
@@ -275,7 +278,7 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
                   Overlays
                 </div>
                 {filteredOverlays.map((type) => {
-                  const isActive = activeIds.has(type);
+                  const count = countByType[type] ?? 0;
                   return (
                     <div key={type} style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -283,27 +286,16 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
                       cursor: "default",
                     }}>
                       <div>
-                        <div style={{ fontSize: 11, color: isActive ? TV.accent : TV.text }}>{INDICATOR_LABELS[type]}</div>
+                        <div style={{ fontSize: 11, color: count > 0 ? TV.accent : TV.text }}>
+                          {INDICATOR_LABELS[type]}
+                          {count > 0 && <span style={{ fontSize: 9, marginLeft: 4, opacity: 0.7 }}>×{count}</span>}
+                        </div>
                         <div style={{ fontSize: 10, color: TV.muted }}>{INDICATOR_DESCRIPTIONS[type]}</div>
                       </div>
-                      {isActive ? (
-                        <button
-                          onClick={() => {
-                            const ind = indicators.find((i) => i.type === type);
-                            if (ind) setEditing(ind);
-                          }}
-                          style={{ ...btnStyle, color: TV.accent, borderColor: TV.accent }}
-                        >
-                          ⚙
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => addIndicator(paneId, type)}
-                          style={{ ...btnStyle }}
-                        >
-                          +
-                        </button>
-                      )}
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button onClick={() => addIndicator(paneId, type)} style={btnStyle} title="Add to this pane">+</button>
+                        <button onClick={() => addIndicatorToAll(type)} style={{ ...btnStyle, fontSize: 9 }} title="Add to all panes">+All</button>
+                      </div>
                     </div>
                   );
                 })}
@@ -317,7 +309,7 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
                   Oscillators
                 </div>
                 {filteredOscillators.map((type) => {
-                  const isActive = activeIds.has(type);
+                  const count = countByType[type] ?? 0;
                   return (
                     <div key={type} style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -325,27 +317,16 @@ export default function IndicatorPanel({ paneId, indicators, onClose }: Props) {
                       cursor: "default",
                     }}>
                       <div>
-                        <div style={{ fontSize: 11, color: isActive ? TV.accent : TV.text }}>{INDICATOR_LABELS[type]}</div>
+                        <div style={{ fontSize: 11, color: count > 0 ? TV.accent : TV.text }}>
+                          {INDICATOR_LABELS[type]}
+                          {count > 0 && <span style={{ fontSize: 9, marginLeft: 4, opacity: 0.7 }}>×{count}</span>}
+                        </div>
                         <div style={{ fontSize: 10, color: TV.muted }}>{INDICATOR_DESCRIPTIONS[type]}</div>
                       </div>
-                      {isActive ? (
-                        <button
-                          onClick={() => {
-                            const ind = indicators.find((i) => i.type === type);
-                            if (ind) setEditing(ind);
-                          }}
-                          style={{ ...btnStyle, color: TV.accent, borderColor: TV.accent }}
-                        >
-                          ⚙
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => addIndicator(paneId, type)}
-                          style={btnStyle}
-                        >
-                          +
-                        </button>
-                      )}
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button onClick={() => addIndicator(paneId, type)} style={btnStyle} title="Add to this pane">+</button>
+                        <button onClick={() => addIndicatorToAll(type)} style={{ ...btnStyle, fontSize: 9 }} title="Add to all panes">+All</button>
+                      </div>
                     </div>
                   );
                 })}

@@ -12,10 +12,28 @@ from core.auth.provider import User
 router = APIRouter(prefix="/fno", tags=["fno"])
 
 
+@router.get("/expiries")
+async def get_fno_expiries(
+    symbol: str = Query("NIFTY", description="Underlying: NIFTY, BANKNIFTY, MIDCPNIFTY, SENSEX"),
+    user: User = Depends(get_current_user),
+):
+    """Return available expiry dates for the given index symbol.
+
+    Tries Kite MCP search_instruments; falls back to rule-based computation.
+    Cached in Redis for 1 hour.
+    """
+    try:
+        from workers.activities.fetch_fno_snapshot import run_expiries
+        return await asyncio.to_thread(run_expiries, symbol)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.get("/snapshot")
 async def get_fno_snapshot(
-    symbol: str = Query("NIFTY", description="Underlying symbol (NIFTY only for v1)"),
-    strikes: int = Query(10, ge=5, le=20, description="Number of strikes on each side of ATM"),
+    symbol:  str = Query("NIFTY", description="Underlying: NIFTY, BANKNIFTY, MIDCPNIFTY, SENSEX"),
+    strikes: int = Query(15, ge=5, le=25, description="Number of strikes on each side of ATM"),
+    expiry:  str | None = Query(None, description="Expiry date YYYY-MM-DD; omit for next expiry"),
     user: User = Depends(get_current_user),
 ):
     """
@@ -28,7 +46,7 @@ async def get_fno_snapshot(
     """
     try:
         from workers.activities.fetch_fno_snapshot import run_fno_snapshot
-        result = await asyncio.to_thread(run_fno_snapshot, symbol, strikes)
+        result = await asyncio.to_thread(run_fno_snapshot, symbol, strikes, expiry)
         return result
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 400:

@@ -1,42 +1,27 @@
-/**
- * OptionsChainTable — options chain grid.
- *
- * Columns (left=CE, right=PE):
- *   CE LTP | CE ΔOI | CE OI | CE OH | STRIKE | PE OH | PE OI | PE ΔOI | PE LTP
- *
- * Colour rules:
- *   - ATM row: slightly brighter background
- *   - CE columns: dim red on hover (writer perspective)
- *   - PE columns: dim green on hover (writer perspective)
- *   - OH cell: amber text "OH" badge
- *   - OH Hit cell: green pulsing "HIT" badge
- */
 import type { FnoSnapshot, OptionSide } from "./types";
 
 const TV = {
-  bg: "#0d0d1a", panel: "#131722", border: "#2a2e39",
+  bg: "#0d0d1a", border: "#2a2e39",
   text: "#d1d4dc", muted: "#787b86",
   up: "#26a69a", down: "#ef5350", warn: "#f59e0b",
-  accent: "#2962ff",
-  atm: "#1a1e2e",
+  accent: "#2962ff", atm: "#1a1e2e",
 } as const;
 
 function fmt2(n: number | undefined): string {
-  if (n === undefined || n === null) return "—";
+  if (n == null) return "—";
   return n.toFixed(2);
 }
 
 function fmtOi(n: number | undefined): string {
-  if (n === undefined || n === null) return "—";
+  if (n == null) return "—";
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  if (Math.abs(n) >= 1_000)     return `${(n / 1_000).toFixed(1)}K`;
   return String(Math.round(n));
 }
 
 function fmtDelta(n: number | undefined): string {
-  if (n === undefined || n === null) return "—";
-  const prefix = n > 0 ? "+" : "";
-  return prefix + fmtOi(n);
+  if (n == null) return "—";
+  return (n > 0 ? "+" : "") + fmtOi(n);
 }
 
 function OhBadge({ side }: { side: OptionSide | null }) {
@@ -62,6 +47,25 @@ function OhBadge({ side }: { side: OptionSide | null }) {
   return null;
 }
 
+function ChartBtn({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      title={`Chart ${label}`}
+      onClick={onClick}
+      style={{
+        background: "transparent", border: "none",
+        color: TV.muted, cursor: "pointer",
+        fontSize: 11, padding: "1px 3px", lineHeight: 1,
+        opacity: 0.7,
+      }}
+      onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+      onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
+    >
+      📈
+    </button>
+  );
+}
+
 const cell: React.CSSProperties = {
   padding: "5px 8px", textAlign: "right", fontSize: 12,
   fontFamily: "monospace", borderBottom: `1px solid ${TV.border}`,
@@ -76,60 +80,58 @@ const headerCell: React.CSSProperties = {
 
 interface Props {
   snapshot: FnoSnapshot;
+  indexName: string;
+  wsSymbol: string;
+  indexLabel: string;
+  onOpenChart: (symbol: string, label: string) => void;
 }
 
-export default function OptionsChainTable({ snapshot }: Props) {
+export default function OptionsChainTable({ snapshot, indexName: _indexName, wsSymbol, indexLabel, onOpenChart }: Props) {
+  void _indexName;
   return (
     <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "70vh" }}>
       <style>{`
-        @keyframes pulse {
-          0%,100% { opacity: 1; }
-          50%      { opacity: 0.4; }
-        }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
       `}</style>
       <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
         <thead>
           <tr>
-            {/* CE headers */}
+            <th style={{ ...headerCell, textAlign: "center", width: 24 }} />
             <th style={{ ...headerCell, textAlign: "right" }}>CE LTP</th>
             <th style={{ ...headerCell, textAlign: "right" }}>CE ΔOI</th>
             <th style={{ ...headerCell, textAlign: "right" }}>CE OI</th>
             <th style={{ ...headerCell, textAlign: "center" }}>OH</th>
-            {/* Strike */}
             <th style={{ ...headerCell, textAlign: "center", color: TV.accent }}>STRIKE</th>
-            {/* PE headers */}
             <th style={{ ...headerCell, textAlign: "center" }}>OH</th>
             <th style={{ ...headerCell, textAlign: "left" }}>PE OI</th>
             <th style={{ ...headerCell, textAlign: "left" }}>PE ΔOI</th>
             <th style={{ ...headerCell, textAlign: "left" }}>PE LTP</th>
+            <th style={{ ...headerCell, textAlign: "center", width: 24 }} />
           </tr>
         </thead>
         <tbody>
           {snapshot.strikes.map(row => {
             const isAtm = row.strike === snapshot.atm_strike;
-            const rowBg = isAtm ? TV.atm : "transparent";
-            const ceLtp  = row.ce?.ltp;
-            const peOi   = row.pe?.oi;
-            const ceOi   = row.ce?.oi;
 
             return (
-              <tr
-                key={row.strike}
-                style={{ background: rowBg }}
-              >
-                {/* CE side (right-aligned, strike decreases left-to-right) */}
-                <td style={{ ...cell, color: ceLtp ? TV.down : TV.muted }}>
-                  {fmt2(ceLtp)}
+              <tr key={row.strike} style={{ background: isAtm ? TV.atm : "transparent" }}>
+                {/* CE chart icon → opens option contract chart */}
+                <td style={{ ...centreCell, padding: "5px 4px" }}>
+                  <ChartBtn
+                    label={`${row.strike} CE`}
+                    onClick={() => onOpenChart(row.ce_symbol, `${indexLabel} · ${row.strike} CE`)}
+                  />
+                </td>
+
+                {/* CE side */}
+                <td style={{ ...cell, color: row.ce?.ltp ? TV.down : TV.muted }}>
+                  {fmt2(row.ce?.ltp)}
                 </td>
                 <td style={{ ...cell, color: (row.ce?.delta_oi ?? 0) > 0 ? TV.down : TV.up }}>
                   {fmtDelta(row.ce?.delta_oi)}
                 </td>
-                <td style={{ ...cell, color: TV.text }}>
-                  {fmtOi(ceOi)}
-                </td>
-                <td style={centreCell}>
-                  <OhBadge side={row.ce} />
-                </td>
+                <td style={{ ...cell, color: TV.text }}>{fmtOi(row.ce?.oi)}</td>
+                <td style={centreCell}><OhBadge side={row.ce} /></td>
 
                 {/* Strike */}
                 <td style={{
@@ -141,18 +143,22 @@ export default function OptionsChainTable({ snapshot }: Props) {
                   {row.strike}
                 </td>
 
-                {/* PE side (left-aligned) */}
-                <td style={centreCell}>
-                  <OhBadge side={row.pe} />
-                </td>
-                <td style={{ ...cell, textAlign: "left", color: TV.text }}>
-                  {fmtOi(peOi)}
-                </td>
+                {/* PE side */}
+                <td style={centreCell}><OhBadge side={row.pe} /></td>
+                <td style={{ ...cell, textAlign: "left", color: TV.text }}>{fmtOi(row.pe?.oi)}</td>
                 <td style={{ ...cell, textAlign: "left", color: (row.pe?.delta_oi ?? 0) > 0 ? TV.up : TV.down }}>
                   {fmtDelta(row.pe?.delta_oi)}
                 </td>
                 <td style={{ ...cell, textAlign: "left", color: row.pe?.ltp ? TV.up : TV.muted }}>
                   {fmt2(row.pe?.ltp)}
+                </td>
+
+                {/* PE chart icon → opens option contract chart */}
+                <td style={{ ...centreCell, padding: "5px 4px" }}>
+                  <ChartBtn
+                    label={`${row.strike} PE`}
+                    onClick={() => onOpenChart(row.pe_symbol, `${indexLabel} · ${row.strike} PE`)}
+                  />
                 </td>
               </tr>
             );
