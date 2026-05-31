@@ -8,11 +8,29 @@ Companion repo: `/Users/ankitatiwari/Desktop/claude-playground/backtest-engine` 
 
 ---
 
+## Current Branch
+```
+fix/fno-live-and-live-charts
+├── 2c3beb8 feat: live chart ticks, Redis JWT auth, Hyperliquid fix, Upstox reconnect
+├── d42b0c5 fix: FnO graceful fallback to Redis cache on Kite MCP failure
+└── b2fd7a7 fix: FnO clear 503 error for expired Kite MCP session
+```
+
+---
+
 ## What Was Completed This Session
 
 ### Sub-project 5: Multi-Chart Live Dashboard — 100% COMPLETE ✅
 
 All 12 tasks done. Charts render live data from Hyperliquid with real-time candle updates.
+
+### FnO Live — Kite MCP Session Handling ✅
+
+FnO endpoint now gracefully handles expired/missing Kite MCP sessions:
+- **Cache-first:** First successful fetch cached in Redis for 5 minutes
+- **Stale fallback:** If MCP fails, serves cached data with `stale: true` flag
+- **Clear errors:** Returns 503 with re-auth instructions instead of raw 500
+- **UI indicator:** Shows "⚠ Cached (Kite MCP unavailable)" warning when stale
 
 ---
 
@@ -78,140 +96,10 @@ All 12 tasks done. Charts render live data from Hyperliquid with real-time candl
 **Root cause:** MarketStatusBar read BTC price from store but never subscribed — relied on ChartPane being open.
 **Fix:** Added `marketWs.subscribe(["CRYPTO:BTC"])` in useEffect on mount.
 
----
-
-## Architecture
-
-### Multi-Chart Data Flow
-```
-Browser ← marketWs.ts → ws://localhost:8000/ws/market
-                              ↓
-                    MarketFeedManager (singleton)
-                    ├── NSE:*   → UpstoxAdapter (WS v3 protobuf)
-                    └── CRYPTO:* → HyperliquidAdapter (allMids JSON)
-                                      ↑
-                          Hyperliquid sends: {"channel":"allMids","data":{"mids":{...}}}
-
-Live tick flow:
-  Hyperliquid WS → _recv_loop → _queue → _fan_out → WebSocket → marketWs.ts → liveQuotes store
-                                                                         ↓
-                                                              ChartPane.applyLiveTick()
-                                                              → candleSeries.update()
-                                                              → volumeSeries.update()
-
-Historical bars:
-  NSE:*    → GET /technical/ohlcv/{symbol} (QuestDB)
-  CRYPTO:* → GET /market/ohlcv?symbol=CRYPTO:BTC (yfinance)
-```
-
-### Auth Flow (Redis-backed)
-```
-POST /auth/login → LocalJWTProvider.create_token() → JWT
-                 → _store_token() → Redis SET auth:session:{token} TTL=168h
-                 → return {access_token}
-
-GET /any endpoint → verify_token() → jwt.decode() (check exp)
-                                → Redis EXISTS auth:session:{token}
-                                → both must pass
-
-POST /auth/logout → revoke_token() → Redis DELETE auth:session:{token}
-```
-
-### BrokerAdapter Protocol
-```python
-class BrokerAdapter(Protocol):
-    name: str
-    prefixes: list[str]
-    async def connect(self) -> None: ...
-    async def subscribe(self, symbols: list[str]) -> None: ...
-    async def unsubscribe(self, symbols: list[str]) -> None: ...
-    async def quotes(self) -> AsyncIterator[Quote]: ...
-    async def disconnect(self) -> None: ...
-```
-
-### Upstox OAuth Flow
-1. User clicks "Reconnect/Connect Upstox" → popup opens `/auth/upstox/login`
-2. Redirects to Upstox OAuth → callback to `/auth/upstox/callback?code=...`
-3. Backend exchanges code → stores in Redis `upstox:token` (TTL 24h)
-4. Triggers `reconnect_adapter("upstox")` to start WS feed
-
----
-
-## Running Services
-
-```bash
-# Backend (port 8000)
-cd trading-system/backend && PYTHONPATH=. .venv/bin/uvicorn api.main:app --port 8000 --reload
-
-# Frontend (port 5173)
-cd trading-system/frontend && npm run dev
-
-# Redis (Docker)
-docker start infra-redis-1
-
-# Backtest engine (port 8085)
-cd backtest-engine && venv/bin/uvicorn backend.main:app --port 8085
-```
-
-## Tests
-
-```bash
-# Backend unit tests (102 passing)
-backend/.venv/bin/python -m pytest backend/tests/unit/ -q
-
-# Frontend E2E (17 passing)
-cd frontend && node_modules/.bin/playwright test --reporter=list
-
-# TypeScript
-cd frontend && npx tsc --noEmit
-```
-
----
-
-## Zustand Store Shape (localStorage key: "trading-dashboard")
-
-```typescript
-{
-  paneCount: 1 | 2 | 4 | 6 | 8,
-  panes: [
-    {
-      id: string,
-      symbol: "NSE:RELIANCE" | "CRYPTO:BTC" | ...,
-      timeframe: "1min" | "15min" | "1h" | "1d" | ...,
-      dataSource: "auto",
-      indicators: [
-        { id, type: "EMA", inputs: { period: 20 }, style: { color: "#f7c948" }, visible: true },
-        ...
-      ]
-    },
-    ...
-  ]
-}
-```
-
----
-
-## Next Steps
-
-1. **E2E test stability** — some tests use `waitForTimeout` patterns that can be flaky
-2. **Volume Profile rendering** — `calcVolumeProfile()` implemented in `indicators.ts`, not wired into chart (needs custom series)
-3. **FVG rendering** — `calcFVG()` implemented, not wired into chart (needs rectangle overlay)
-4. **Fundamental Analysis** — Sub-project 6 not started
-5. **Quant Models** — Sub-project 7 not started
-
----
-
-## Overall Project Roadmap
-
-| Sub-project | Status |
-|---|---|
-| 1. Technical Analysis Engine (24 tasks) | ✅ COMPLETE |
-| 2. Condition Evaluation Engine (9 tasks) | ✅ COMPLETE |
-| 3. Backtest Integration (12 tasks) | ✅ COMPLETE |
-| 4. FnO Live Analysis (7 tasks) | ✅ COMPLETE |
-| 5. Multi-Chart Live Dashboard (12 tasks) | ✅ COMPLETE |
-| 6. Fundamental Analysis | 🔲 Not started |
-| 7. Quant Models | 🔲 Not started |
+### 13. FnO 400 Bad Request on Expired Session ✅
+**File:** `backend/api/routers/fno.py`, `backend/workers/activities/fetch_fno_snapshot.py`
+**Root cause:** Kite MCP session expired → 400 Bad Request → raw 500 error to user.
+**Fix:** Cache-first pattern: successful fetch cached in Redis (5 min TTL). On MCP failure, serve stale cache with `stale: true`. UI shows warning badge. Clear 503 error with re-auth instructions.
 
 ---
 
@@ -226,3 +114,5 @@ cd frontend && npx tsc --noEmit
 | Hyperliquid mids nested under `data.mids` | Not top-level `mids` — use `data.get("data",{}).get("mids",{})` |
 | JWT expiry defaults to 24h | Set `JWT_EXPIRY_HOURS=168` in `.env` (7 days) |
 | Upstox token expires daily | User re-auths each morning via OAuth popup |
+| Kite MCP session expires | Re-auth: `cd backend && PYTHONPATH=. python scripts/backfill_1min_kitemcp.py --auth` |
+| FnO with expired Kite session | Serves cached data from Redis with `stale: true` flag |
