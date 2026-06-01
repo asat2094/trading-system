@@ -84,7 +84,7 @@ export default function FnoLive() {
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState<string>("");
   const [countdown, setCountdown]       = useState(AUTO_REFRESH_SEC);
-  const [autoOn, setAutoOn]             = useState(true);
+  const [autoOn, setAutoOn]             = useState(false);
   const [chartTarget, setChartTarget]   = useState<ChartTarget | null>(null);
 
   const indexRef     = useRef<IndexValue>("NIFTY");

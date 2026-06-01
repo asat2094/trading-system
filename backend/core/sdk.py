@@ -413,6 +413,17 @@ class MarketData:
             raise ValueError(f"Unknown timeframe {tf!r}")
 
         loop = asyncio.get_running_loop()
+        prefix = symbol.split(":")[0] if ":" in symbol else ""
+
+        # NFO/BFO (options/futures): Upstox NFO instruments file is 403 → go straight to Kite MCP
+        if prefix in ("NFO", "BFO"):
+            try:
+                df = await loop.run_in_executor(None, self._query_kitemcp, symbol, tf, from_dt, to_dt)
+                if not df.empty:
+                    return df
+            except Exception:
+                pass
+            return pd.DataFrame()
 
         # Primary: Upstox (same OAuth as WS feed, consistent data)
         try:

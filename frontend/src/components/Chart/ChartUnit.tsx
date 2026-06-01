@@ -175,7 +175,7 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
 
   // ── Live tick update ──────────────────────────────────────────────────────
   useEffect(() => {
-    const tfOffsetSec = (TF_MS[timeframe] ?? 0) / 1000;
+    const tfOffsetSec = 0; // candles display at open time (TradingView convention)
     return useLiveQuotesStore.subscribe((state) => {
       const q = state.quotes[symbol];
       if (!q) return;
@@ -291,7 +291,7 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
             <CandlestickChart
               ref={chartRef} bars={bars} studies={studies}
               onNeedMoreData={handleNeedMoreData}
-              tfOffsetSec={(TF_MS[timeframe] ?? 0) / 1000}
+              tfOffsetSec={0}
               onVisibleRangeChange={() => setRenderTick((t) => t + 1)}
               fitKey={fitKey}
             />
