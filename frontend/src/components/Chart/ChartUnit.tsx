@@ -82,6 +82,8 @@ function toStudyConfig(ind: IndicatorConfig): StudyConfig | null {
   return merged as StudyConfig;
 }
 
+const _EMPTY: IndicatorConfig[] = [];  // stable ref — prevents infinite loop in useDashboardStore selector
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 export interface ChartUnitProps {
   symbol:    string;
@@ -95,7 +97,7 @@ export interface ChartUnitProps {
 export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus }: ChartUnitProps) {
   // Store indicators (when paneId given) vs local indicators
   const storeIndicators = useDashboardStore(
-    (s) => paneId ? (s.panes.find((p) => p.id === paneId)?.indicators ?? []) : []
+    (s) => paneId ? (s.panes.find((p) => p.id === paneId)?.indicators ?? _EMPTY) : _EMPTY
   );
   const [localIndicators, setLocalIndicators] = useState<IndicatorConfig[]>([]);
   const indicators = paneId ? storeIndicators : localIndicators;
