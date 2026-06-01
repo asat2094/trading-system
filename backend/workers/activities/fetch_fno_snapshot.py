@@ -156,9 +156,10 @@ def _nearest_expiry(symbol: str, today: date) -> date:
     expiry_type = cfg["expiry_type"]
 
     # Weekly expiries: find next occurrence of target weekday
+    # If today IS the expiry day, use today (not +7 days).
     if expiry_type in ("weekly_tue", "weekly_thu"):
         target = 1 if expiry_type == "weekly_tue" else 3  # 1=Tue, 3=Thu
-        days = (target - today.weekday()) % 7 or 7
+        days = (target - today.weekday()) % 7
         return today + timedelta(days=days)
 
     # Monthly expiries: last Tuesday (monthly_tue) or last Thursday (monthly_thu)
