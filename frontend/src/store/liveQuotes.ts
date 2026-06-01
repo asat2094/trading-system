@@ -23,12 +23,17 @@ interface LiveQuotesStore {
   setBrokerStatus: (status: Record<string, string>) => void;
   upstoxHasToken: boolean;
   setUpstoxHasToken: (v: boolean) => void;
+  kiteConnected: boolean;
+  kiteUser: string | null;
+  setKiteStatus: (connected: boolean, user: string | null) => void;
 }
 
 export const useLiveQuotesStore = create<LiveQuotesStore>()((set) => ({
   quotes: {},
   brokerStatus: {},
   upstoxHasToken: false,
+  kiteConnected: false,
+  kiteUser: null,
 
   setQuote: (q) => set((s) => {
     const prev = s.quotes[q.symbol];
@@ -42,4 +47,5 @@ export const useLiveQuotesStore = create<LiveQuotesStore>()((set) => ({
 
   setBrokerStatus: (status) => set({ brokerStatus: status }),
   setUpstoxHasToken: (v) => set({ upstoxHasToken: v }),
+  setKiteStatus: (connected, user) => set({ kiteConnected: connected, kiteUser: user }),
 }));
