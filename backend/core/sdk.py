@@ -40,7 +40,11 @@ _INDEX_UPSTOX_KEYS: dict[str, str] = {
 _INSTRUMENTS_CACHE: dict[str, dict[str, str]] = {}
 
 def _load_instruments(exchange: str) -> dict[str, str]:
-    """Download Upstox instruments file and return trading_symbol → instrument_key for EQ type."""
+    """Download Upstox instruments file and return trading_symbol → instrument_key.
+
+    For equity exchanges (NSE/BSE) only EQ type is loaded.
+    For derivatives exchanges (NFO/BFO) all types are loaded (CE, PE, FUT).
+    """
     global _INSTRUMENTS_CACHE
     if exchange in _INSTRUMENTS_CACHE:
         return _INSTRUMENTS_CACHE[exchange]
@@ -49,10 +53,11 @@ def _load_instruments(exchange: str) -> dict[str, str]:
         url  = f"https://assets.upstox.com/market-quote/instruments/exchange/{exchange}.json.gz"
         resp = _httpx.get(url, timeout=30, follow_redirects=True)
         data = json.loads(gzip.decompress(resp.content))
+        eq_only = exchange not in ("NFO", "BFO", "CDS", "MCX")
         mapping = {
             item["trading_symbol"]: item["instrument_key"]
             for item in data
-            if item.get("instrument_type") == "EQ"
+            if not eq_only or item.get("instrument_type") == "EQ"
         }
         _INSTRUMENTS_CACHE[exchange] = mapping
         return mapping
