@@ -1,4 +1,4 @@
-# Session Handoff — 2026-05-31
+# Session Handoff — 2026-06-02
 
 ## Project
 `/Users/ankitatiwari/Desktop/claude-playground/trading-system`
@@ -9,97 +9,79 @@ Companion repo: `/Users/ankitatiwari/Desktop/claude-playground/backtest-engine` 
 ---
 
 ## Current Branch
-```
-fix/fno-live-and-live-charts
-├── 2c3beb8 feat: live chart ticks, Redis JWT auth, Hyperliquid fix, Upstox reconnect
-├── d42b0c5 fix: FnO graceful fallback to Redis cache on Kite MCP failure
-└── b2fd7a7 fix: FnO clear 503 error for expired Kite MCP session
-```
+`develop` — all PRs merged.
+
+### Merged this session
+| PR | Branch | Summary |
+|---|---|---|
+| #1 | `feature/chart-panel-redesign` | Global indicator panel, ChartUnit, drawing tools, collapsible sidebar, Pivot/VWAP bands/EMA source, live Upstox quotes |
+| #2 | `feature/kitemcp-broker` | KiteMCP Connect Kite button, session in Redis, `/auth/kite/init|status` |
+| #3 | `feature/fno-chart-fix` | NFO instrument lookup, infinite render loop fix (`_EMPTY`), fitKey TF change, TF_DAYS 1d→90 |
+| #4 | `feature/fno-option-chart-fix` | FnO expiry bug (today's expiry on expiry day), NFO→KiteMCP routing, auto-refresh OFF default, candles at open time |
 
 ---
 
-## What Was Completed This Session
+## Architecture Overview
 
-### Sub-project 5: Multi-Chart Live Dashboard — 100% COMPLETE ✅
+### Backend (`backend/`)
+- `brokers/upstox.py` — Upstox WS v3 + REST; ISIN keys for EQ (`NSE_EQ|INE040A01034`), NFO prefixes added; auto-reconnect with 2→60s backoff
+- `brokers/hyperliquid.py` — Hyperliquid WS adapter
+- `brokers/base.py` — `Quote` dataclass, `BrokerAdapter` protocol
+- `api/market_ws.py` — `MarketFeedManager`; fan_out + add_client at INFO log level
+- `api/routers/market.py` — Upstox OAuth, KiteMCP auth (`/auth/kite/init|status`), Hyperliquid reconnect
+- `api/routers/technical.py` — `/technical/symbols` (normalizes `NSE_NIFTY_50`→`NIFTY 50`), `/technical/candles`
+- `api/routers/fno.py` — `/fno/snapshot`, `/fno/expiries` (KiteMCP, Redis cache)
+- `core/sdk.py` — `MarketData`; NFO/BFO routes directly to KiteMCP (Upstox NFO file is 403); session from Redis first, file fallback
+- `workers/activities/fetch_fno_snapshot.py` — 2 KiteMCP calls per snapshot; `_nearest_expiry` uses today when today IS expiry day
 
-All 12 tasks done. Charts render live data from Hyperliquid with real-time candle updates.
-
-### FnO Live — Kite MCP Session Handling ✅
-
-FnO endpoint now gracefully handles expired/missing Kite MCP sessions:
-- **Cache-first:** First successful fetch cached in Redis for 5 minutes
-- **Stale fallback:** If MCP fails, serves cached data with `stale: true` flag
-- **Clear errors:** Returns 503 with re-auth instructions instead of raw 500
-- **UI indicator:** Shows "⚠ Cached (Kite MCP unavailable)" warning when stale
+### Frontend (`frontend/src/`)
+- `components/Chart/ChartUnit.tsx` — unified chart; `_EMPTY` stable ref for standalone mode; `tfOffsetSec=0` (open-time convention); `fitKey` resets fitContent on TF change
+- `components/Chart/CandlestickChart.tsx` — `fitKey` prop resets `didFitContent`; `tfOffsetSec` param (now always 0)
+- `components/Chart/indicators.ts` — EMA/SMA/BB/VWAP/RSI/MACD/Stoch/VolumeProfile/FVG/Pivot
+- `components/Chart/types.ts` — `StudyConfig`, `OVERLAY_TYPES`, `OSCILLATOR_TYPES`
+- `components/Dashboard/IndicatorPanel.tsx` — global (linkId) vs individual vs local mode
+- `components/Dashboard/PaneControls.tsx` — symbol search; canonical symbols (with `:`) skip `NSE:` prefix
+- `components/Dashboard/DrawingToolbar.tsx` — hline/trendline/fibonacci/long_position/short_position
+- `components/Layout/Sidebar.tsx` — 44px↔220px collapsible nav, localStorage persist
+- `components/Fno/FnoChartModal.tsx` — options chart modal; standalone ChartUnit (no paneId)
+- `lib/marketWs.ts` — singleton WS to `/ws/market`; `ws=null` on close; onerror handler
+- `store/dashboard.ts` — panes, linkId indicators, focusedPaneId persisted
+- `store/liveQuotes.ts` — Zustand quotes; kiteConnected + kiteUser state
+- `pages/FnoLive.tsx` — auto-refresh defaults OFF; index chart + options chain
 
 ---
 
-## BUGS FIXED THIS SESSION
+## Critical Facts
 
-### 1. Chart NaN Timestamp Bug ✅
-**File:** `frontend/src/components/Chart/CandlestickChart.tsx:62-71`
-**Root cause:** `tsToUnix()` appended `+05:30` to crypto timestamps that already had timezone info → `NaN`.
-**Fix:** Detect existing timezone (`/[+-]\d{2}:\d{2}$/` or `Z`) and parse directly; QuestDB timestamps get `Z` appended.
+### Upstox
+- **EQ WS key**: `NSE_EQ|INE040A01034` (ISIN), NOT `NSE_EQ|HDFCBANK`
+- **Index WS key**: `NSE_INDEX|Nifty 50` (mixed case) — hardcoded in `_INDEX_INSTRUMENT_KEYS`
+- **NFO**: adapter prefixes include `NFO`/`BFO`; instruments file returns 403 → candle fallback to KiteMCP
+- **WS frames**: MUST be binary (`.encode()`), NOT text
+- **Token**: daily expiry; 403 on WS = expired → Redis key cleared
 
-### 2. Upstox Connection Status Not Updating ✅
-**File:** `backend/brokers/upstox.py`
-**Root cause:** `UpstoxAdapter` never set `_running` flag. `market_ws.py` checks `getattr(adapter, "_running", False)`.
-**Fix:** Added `self._running` tracking in `__init__`, `connect()`, `disconnect()`, and `_recv_loop()` finally block.
+### KiteMCP
+- Session stored as `kite:session_id` in Redis AND `.kitemcp_session` file
+- `/auth/kite/init` → initializes MCP session, returns Zerodha login URL; user opens popup, polls `/auth/kite/status`
+- Rate limit: 180 RPM shared bucket (`_kite_limiter`) across snapshot + candles + expiries
+- **Infinite loop was hammering KiteMCP** (now fixed via `_EMPTY` ref in ChartUnit)
 
-### 3. Hyperliquid `data.mids` Nested Under Wrong Key ✅
-**File:** `backend/brokers/hyperliquid.py:87`
-**Root cause:** Hyperliquid sends `{"channel":"allMids","data":{"mids":{...}}}` but adapter read `data.get("mids")` at top level → 0 coins.
-**Fix:** Changed to `data.get("data", {}).get("mids", {})`.
+### FnO
+- `_nearest_expiry`: `(target - weekday) % 7` — today IS allowed as expiry day (removed `or 7`)
+- 2 KiteMCP calls per snapshot: `get_ltp` + `get_quotes`; cached 5min Redis
+- Chart data for options: KiteMCP (Upstox NFO file 403)
 
-### 4. Live Quotes Not Reaching Frontend ✅
-**Root cause:** `_fan_out` only forwarded quotes to already-subscribed clients. Quotes arriving before any client subscribed were silently dropped.
-**Fix:** `MarketFeedManager` now caches `_last_quote[symbol]` and sends it immediately on `add_client`.
+### Chart Display
+- `tfOffsetSec = 0` — candles at OPEN time (TradingView convention)
+- `TF_DAYS["1d"] = 90` (was 365) — 3-month default view for daily charts
+- `fitKey` increments on each `loadInitial` → CandlestickChart resets `didFitContent` → always refit on TF change
 
-### 5. Chart Auto-Adjusting on Every Tick ✅
-**File:** `frontend/src/components/Chart/CandlestickChart.tsx`
-**Root cause:** `chart.timeScale().fitContent()` called on every `bars` change (including live ticks).
-**Fix:** Added `didFitContent` ref — `fitContent()` only runs on initial data load.
-
-### 6. Volume in Separate Pane ✅
-**File:** `frontend/src/components/Chart/CandlestickChart.tsx:141-148`
-**Fix:** Moved volume `HistogramSeries` from pane 1 to pane 0 with `priceScaleId: "vol"` and `scaleMargins: { top: 0.8, bottom: 0 }`.
-
-### 7. Live Candle Updates Not Working ✅
-**File:** `frontend/src/components/Dashboard/ChartPane.tsx:149-215`
-**Root cause:** Timestamp mismatch between `candleFloor(tickMs)/1000` and `tsToUnix(lastBar.ts)` — floating-point precision and timezone handling differences.
-**Fix:** Use `tsToUnix(last.ts)` for same-candle updates (guaranteed to match chart's internal time). Also update both candlestick and volume series via `series.update()` (TradingView pattern: same time = update in place, newer time = append).
-
-### 8. Upstox 500 Error When Redis Down ✅
-**File:** `backend/api/routers/market.py:86-123`
-**Root cause:** `upstox_callback` and `upstox_status` crashed on `redis.ConnectionError`.
-**Fix:** Wrapped Redis operations in try/except — returns graceful fallback when Redis is unavailable.
-
-### 9. JWT Token Expiry ✅
-**Root cause:** JWT expired after 24h, on refresh backend rejected WS connection → no live data.
-**Fix:**
-- `JWT_EXPIRY_HOURS` increased to 168 (7 days) in `.env` and `config.py`
-- Client-side expiry check in `Dashboard.tsx` — redirects to `/login` if JWT expired
-- **Redis-backed token tracking:** `LocalJWTProvider` now stores tokens in Redis (`auth:session:{token}`) with TTL. `verify_token` checks Redis existence in addition to JWT decode. `revoke_token` deletes from Redis.
-- New `POST /auth/logout` endpoint revokes token from Redis.
-
-### 10. TickerBar OHLCV for All Symbols ✅
-**File:** `frontend/src/components/Dashboard/TickerBar.tsx`
-**Root cause:** TickerBar only read from `useLiveQuotesStore` — showed nothing for NSE symbols without live feed.
-**Fix:** Added `lastBar` prop fallback. TickerBar now shows OHLCV from last chart bar when no live quote available.
-
-### 11. Upstox Button Shows "Reconnect" When Token Exists ✅
-**File:** `frontend/src/pages/Dashboard.tsx`
-**Fix:** TopBar checks `/auth/upstox/status` on mount. Shows "Reconnect Upstox" when token exists but not connected, "Connect Upstox" when no token, green dot when connected.
-
-### 12. MarketStatusBar Auto-Subscribes to BTC ✅
-**File:** `frontend/src/components/Dashboard/MarketStatusBar.tsx`
-**Root cause:** MarketStatusBar read BTC price from store but never subscribed — relied on ChartPane being open.
-**Fix:** Added `marketWs.subscribe(["CRYPTO:BTC"])` in useEffect on mount.
-
-### 13. FnO 400 Bad Request on Expired Session ✅
-**File:** `backend/api/routers/fno.py`, `backend/workers/activities/fetch_fno_snapshot.py`
-**Root cause:** Kite MCP session expired → 400 Bad Request → raw 500 error to user.
-**Fix:** Cache-first pattern: successful fetch cached in Redis (5 min TTL). On MCP failure, serve stale cache with `stale: true`. UI shows warning badge. Clear 503 error with re-auth instructions.
+### Backend Startup
+```
+cd backend
+.venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/backend.log 2>&1 &
+```
+**Do NOT use `--reload`** — file watching broken on this machine. Kill and restart after code changes.
 
 ---
 
@@ -107,12 +89,12 @@ FnO endpoint now gracefully handles expired/missing Kite MCP sessions:
 
 | Issue | Fix |
 |---|---|
-| `npx playwright test` version conflict | Use `node_modules/.bin/playwright test` directly |
+| `npx playwright test` version conflict | Use `node_modules/.bin/playwright test` |
 | Docker must be running for Redis | `open -a Docker` then `docker start infra-redis-1` |
-| Hyperliquid allMids has no OHLCV | Historical bars from yfinance; live ticks build candles in ChartPane |
-| `data.rows` not `data.bars` | All OHLCV endpoints return `{rows: [...]}` |
-| Hyperliquid mids nested under `data.mids` | Not top-level `mids` — use `data.get("data",{}).get("mids",{})` |
-| JWT expiry defaults to 24h | Set `JWT_EXPIRY_HOURS=168` in `.env` (7 days) |
-| Upstox token expires daily | User re-auths each morning via OAuth popup |
-| Kite MCP session expires | Re-auth: `cd backend && PYTHONPATH=. python scripts/backfill_1min_kitemcp.py --auth` |
-| FnO with expired Kite session | Serves cached data from Redis with `stale: true` flag |
+| Upstox token expires daily | Re-auth each morning via OAuth popup |
+| KiteMCP session expires | Click "Connect Kite" button in Dashboard TopBar |
+| FnO stale cache on MCP failure | Redis serves last snapshot with `stale: true` |
+| NSE equity charts need Upstox token | ISIN lookup requires instruments file (NSE.json.gz works, NFO.json.gz is 403) |
+| FnO expiry on expiry day | Shows current-day expiry; next expiry after 3:30 PM IST (manual refresh needed) |
+| Symbol search indices | DB has `NSE_NIFTY_50` → normalized to `NIFTY 50` in `_build_symbol_cache` |
+| ChartUnit standalone (FnO modal) | Must use `_EMPTY` const for useDashboardStore selector — never inline `[]` |
