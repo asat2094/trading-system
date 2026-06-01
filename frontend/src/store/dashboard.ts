@@ -7,7 +7,7 @@ import { persist } from "zustand/middleware";
 
 export type IndicatorType =
   | "EMA" | "SMA" | "BB" | "VWAP" | "RSI" | "MACD" | "Stoch"
-  | "VolumeProfile" | "FVG";
+  | "VolumeProfile" | "FVG" | "Pivot";
 
 export interface IndicatorConfig {
   id: string;
@@ -27,27 +27,29 @@ export interface PaneConfig {
 }
 
 export const DEFAULT_INDICATOR_INPUTS: Record<IndicatorType, Record<string, number | string | boolean>> = {
-  EMA:           { period: 20 },
-  SMA:           { period: 20 },
+  EMA:           { period: 20, source: "close" },
+  SMA:           { period: 20, source: "close" },
   BB:            { period: 20, std: 2 },
-  VWAP:          {},
+  VWAP:          { showBands: false },
   RSI:           { period: 14 },
   MACD:          { fast: 12, slow: 26, signal: 9 },
   Stoch:         { k: 14, d: 3, smooth: 3 },
   VolumeProfile: { rows: 24, valueAreaPct: 70 },
   FVG:           { minGapPct: 0.1, showLabels: true, extendBoxes: true },
+  Pivot:         { pivotType: "standard", period: "daily" },
 };
 
 export const DEFAULT_INDICATOR_STYLE: Record<IndicatorType, Record<string, string>> = {
   EMA:           { color: "#f7c948" },
   SMA:           { color: "#4caf50" },
   BB:            { upperColor: "#2196f3", midColor: "#888888", lowerColor: "#2196f3" },
-  VWAP:          { color: "#ff9800" },
+  VWAP:          { color: "#ff9800", band1Color: "#ff980055", band2Color: "#ff980033", band3Color: "#ff980022" },
   RSI:           { color: "#ce93d8" },
   MACD:          { macdColor: "#2196f3", signalColor: "#f7c948" },
   Stoch:         { kColor: "#2196f3", dColor: "#f7c948" },
   VolumeProfile: { upColor: "#26a69a88", downColor: "#ef535088", pocColor: "#f59e0b" },
   FVG:           { bullColor: "#26a69a", bearColor: "#ef5350", opacity: "0.15" },
+  Pivot:         { ppColor: "#2196f3", rColor: "#26a69a", sColor: "#ef5350" },
 };
 
 function newPane(symbol: string, timeframe = "15min"): PaneConfig {

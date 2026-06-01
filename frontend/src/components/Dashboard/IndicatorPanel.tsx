@@ -12,22 +12,49 @@ const TV = {
   accent: "#2962ff", up: "#26a69a", down: "#ef5350",
 } as const;
 
-const OVERLAY_TYPES: IndicatorType[]    = ["EMA", "SMA", "BB", "VWAP", "VolumeProfile", "FVG"];
+const OVERLAY_TYPES: IndicatorType[]    = ["EMA", "SMA", "BB", "VWAP", "Pivot", "VolumeProfile", "FVG"];
 const OSCILLATOR_TYPES: IndicatorType[] = ["RSI", "MACD", "Stoch"];
 
 const INDICATOR_LABELS: Record<IndicatorType, string> = {
   EMA: "EMA", SMA: "SMA", BB: "Bollinger Bands", VWAP: "VWAP",
   RSI: "RSI", MACD: "MACD", Stoch: "Stochastic",
   VolumeProfile: "Volume Profile", FVG: "Fair Value Gap",
+  Pivot: "Pivot Points",
 };
 
 const INDICATOR_DESCRIPTIONS: Record<IndicatorType, string> = {
-  EMA: "Exponential Moving Average", SMA: "Simple Moving Average",
-  BB: "Bollinger Bands (20, 2σ)", VWAP: "Volume Weighted Avg Price",
+  EMA: "Exponential Moving Average — configurable source", SMA: "Simple Moving Average — configurable source",
+  BB: "Bollinger Bands (20, 2σ)", VWAP: "VWAP with optional SD bands",
   RSI: "Relative Strength Index", MACD: "MACD (12, 26, 9)",
   Stoch: "Stochastic Oscillator",
   VolumeProfile: "Price × Volume histogram",
   FVG: "Fair Value Gap zones",
+  Pivot: "Standard / Fibonacci / Woodie / Camarilla",
+};
+
+// Fields that render as dropdowns instead of text/number inputs
+const SELECT_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  source: [
+    { value: "close",  label: "Close" },
+    { value: "open",   label: "Open" },
+    { value: "high",   label: "High" },
+    { value: "low",    label: "Low" },
+    { value: "hl2",    label: "HL/2  (High+Low)/2" },
+    { value: "hlc3",   label: "HLC/3 (High+Low+Close)/3" },
+    { value: "ohlc4",  label: "OHLC/4 (O+H+L+C)/4" },
+    { value: "hlcc4",  label: "HLCC/4 (H+L+C+C)/4" },
+  ],
+  pivotType: [
+    { value: "standard",  label: "Standard (Classic)" },
+    { value: "fibonacci", label: "Fibonacci" },
+    { value: "woodie",    label: "Woodie" },
+    { value: "camarilla", label: "Camarilla" },
+  ],
+  period: [
+    { value: "daily",   label: "Daily" },
+    { value: "weekly",  label: "Weekly" },
+    { value: "monthly", label: "Monthly" },
+  ],
 };
 
 export type IndicatorPanelMode = "global" | "individual";
@@ -110,8 +137,23 @@ function SettingsLayer({ paneId, indicator, onBack, mode, local }: SettingsLayer
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {Object.entries(draft.inputs).map(([key, value]) => (
               <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                <label style={{ fontSize: 11, color: TV.muted, textTransform: "capitalize", flexShrink: 0 }}>{key}</label>
-                {typeof value === "boolean" ? (
+                <label style={{ fontSize: 11, color: TV.muted, textTransform: "capitalize", flexShrink: 0 }}>
+                  {key === "pivotType" ? "Type" : key === "showBands" ? "Show Bands" : key}
+                </label>
+                {SELECT_OPTIONS[key] ? (
+                  <select
+                    value={String(value)}
+                    onChange={(e) => setDraft((d) => ({ ...d, inputs: { ...d.inputs, [key]: e.target.value } }))}
+                    style={{
+                      background: "#131722", border: `1px solid ${TV.border}`, borderRadius: 3,
+                      color: TV.text, padding: "2px 6px", fontSize: 11, outline: "none", cursor: "pointer",
+                    }}
+                  >
+                    {SELECT_OPTIONS[key].map(({ value: v, label: l }) => (
+                      <option key={v} value={v}>{l}</option>
+                    ))}
+                  </select>
+                ) : typeof value === "boolean" ? (
                   <input
                     type="checkbox"
                     checked={value}

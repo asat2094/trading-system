@@ -13,7 +13,7 @@ import { apiClient } from "../../api/client";
 import CandlestickChart from "./CandlestickChart";
 import type { ChartHandle } from "./CandlestickChart";
 import type { Bar } from "./indicators";
-import { calcEMA, calcSMA, calcBB, calcVWAP } from "./indicators";
+import { calcEMA, calcSMA, calcBB, calcVWAPBands, calcPivots, getSourceValues } from "./indicators";
 import type { StudyConfig } from "./types";
 import { STUDY_DEFAULTS } from "./types";
 import type { UTCTimestamp } from "lightweight-charts";
@@ -334,6 +334,56 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
                   }
                   return null;
                 })}
+                {/* Pivot lines */}
+                {indicators.filter(ind => ind.visible && ind.type === "Pivot").map(ind => {
+                  const sty = ind.style as Record<string, string>;
+                  const pivots = calcPivots(
+                    [...bars].sort((a,b) => tsToUnix(a.ts) - tsToUnix(b.ts)),
+                    String(ind.inputs.pivotType ?? "standard"),
+                    String(ind.inputs.period ?? "daily")
+                  );
+                  if (!pivots) return null;
+                  const levels: [string, number, string, string][] = [
+                    ["pp", pivots.pp, sty.ppColor ?? "#2196f3", "PP"],
+                    ["r1", pivots.r1, sty.rColor ?? "#26a69a", "R1"],
+                    ["r2", pivots.r2, sty.rColor ?? "#26a69a", "R2"],
+                    ["r3", pivots.r3, sty.rColor ?? "#26a69a", "R3"],
+                    ["s1", pivots.s1, sty.sColor ?? "#ef5350", "S1"],
+                    ["s2", pivots.s2, sty.sColor ?? "#ef5350", "S2"],
+                    ["s3", pivots.s3, sty.sColor ?? "#ef5350", "S3"],
+                    ...(pivots.r4 != null ? [["r4", pivots.r4, sty.rColor ?? "#26a69a", "R4"] as [string,number,string,string]] : []),
+                    ...(pivots.s4 != null ? [["s4", pivots.s4, sty.sColor ?? "#ef5350", "S4"] as [string,number,string,string]] : []),
+                  ];
+                  return <g key={ind.id}>{levels.map(([sfx, val, color, tag]) => {
+                    const y = toY(val); if (y < -100 || y > 9999) return null;
+                    return <g key={sfx}>
+                      <line x1={0} y1={y} x2={`calc(100% - ${scaleW}px)`} y2={y} stroke={color} strokeWidth={1} strokeDasharray={sfx === "pp" ? "none" : "6 3"} opacity={0.85} />
+                      <text x={6} y={y - 3} fill={color} fontSize={9} fontFamily="monospace" fontWeight={sfx === "pp" ? 700 : 400}>{tag} {val.toFixed(2)}</text>
+                    </g>;
+                  })}</g>;
+                })}
+
+                {/* VWAP bands in SVG */}
+                {indicators.filter(ind => ind.visible && ind.type === "VWAP" && ind.inputs.showBands).map(ind => {
+                  const sty = ind.style as Record<string, string>;
+                  const sorted2 = [...bars].sort((a,b) => tsToUnix(a.ts) - tsToUnix(b.ts));
+                  const bands = calcVWAPBands(sorted2);
+                  const vwapBandLines: [string, number[], string][] = [
+                    ["u1", bands.upper1, sty.band1Color ?? "#ff980066"],
+                    ["l1", bands.lower1, sty.band1Color ?? "#ff980066"],
+                    ["u2", bands.upper2, sty.band2Color ?? "#ff980044"],
+                    ["l2", bands.lower2, sty.band2Color ?? "#ff980044"],
+                    ["u3", bands.upper3, sty.band3Color ?? "#ff980022"],
+                    ["l3", bands.lower3, sty.band3Color ?? "#ff980022"],
+                  ];
+                  return <g key={ind.id}>{vwapBandLines.map(([sfx, arr]) => {
+                    const last = arr[arr.length-1]; if (!last || isNaN(last)) return null;
+                    const y = toY(last);
+                    const color = vwapBandLines.find(([s]) => s === sfx)?.[2] ?? "#ff980044";
+                    return <line key={sfx} x1={0} y1={y} x2={`calc(100% - ${scaleW}px)`} y2={y} stroke={color} strokeWidth={1} strokeDasharray="3 3" opacity={0.7} />;
+                  })}</g>;
+                })}
+
                 {pendingClicksState.map((pt, i) => {
                   const cx = toX(pt.t), cy = toY(pt.p);
                   return <g key={i}><circle cx={cx} cy={cy} r={4} fill="#f7c948" opacity={0.8} /><circle cx={cx} cy={cy} r={4} fill="none" stroke="#f7c948" strokeWidth={1} /></g>;
@@ -349,7 +399,7 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
             void renderTick;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const sw: number = (chart as any).priceScale?.("right")?.width?.() ?? 65;
-            interface YLabel { id: string; y: number; value: number; color: string; isPrice?: boolean; countdown?: string; }
+            interface YLabel { id: string; y: number; value: number; color: string; tag?: string; isPrice?: boolean; countdown?: string; }
             const labels: YLabel[] = [];
             if (priceLabel) {
               const y = cs.priceToCoordinate(priceLabel.price);
@@ -360,13 +410,53 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
             for (const ind of indicators) {
               if (!ind.visible) continue;
               const sty = ind.style as Record<string, string>;
-              if (ind.type === "EMA") { const vals = calcEMA(closes, Number(ind.inputs.period)), last = vals[vals.length-1]; if (!isNaN(last)) { const y = cs.priceToCoordinate(last); if (y != null) labels.push({ id: ind.id, y, value: last, color: sty.color ?? "#f7c948" }); } }
-              else if (ind.type === "SMA") { const vals = calcSMA(closes, Number(ind.inputs.period)), last = vals[vals.length-1]; if (!isNaN(last)) { const y = cs.priceToCoordinate(last); if (y != null) labels.push({ id: ind.id, y, value: last, color: sty.color ?? "#4caf50" }); } }
-              else if (ind.type === "VWAP") { const vals = calcVWAP(sorted), last = vals[vals.length-1]; if (!isNaN(last)) { const y = cs.priceToCoordinate(last); if (y != null) labels.push({ id: ind.id, y, value: last, color: sty.color ?? "#ff9800" }); } }
-              else if (ind.type === "BB") {
+              if (ind.type === "EMA") {
+                const src = getSourceValues(sorted, String(ind.inputs.source ?? "close"));
+                const vals = calcEMA(src, Number(ind.inputs.period)), last = vals[vals.length-1];
+                if (!isNaN(last)) { const y = cs.priceToCoordinate(last); if (y != null) labels.push({ id: ind.id, y, value: last, color: sty.color ?? "#f7c948" }); }
+              } else if (ind.type === "SMA") {
+                const src = getSourceValues(sorted, String(ind.inputs.source ?? "close"));
+                const vals = calcSMA(src, Number(ind.inputs.period)), last = vals[vals.length-1];
+                if (!isNaN(last)) { const y = cs.priceToCoordinate(last); if (y != null) labels.push({ id: ind.id, y, value: last, color: sty.color ?? "#4caf50" }); }
+              } else if (ind.type === "VWAP") {
+                const bands = calcVWAPBands(sorted);
+                const last = bands.vwap[bands.vwap.length-1];
+                if (!isNaN(last)) { const y = cs.priceToCoordinate(last); if (y != null) labels.push({ id: ind.id, y, value: last, color: sty.color ?? "#ff9800", tag: "V" }); }
+                if (ind.inputs.showBands) {
+                  const bandPairs: [string, number[], string, string][] = [
+                    [`${ind.id}-u1`, bands.upper1, sty.band1Color ?? "#ff980066", "+1σ"],
+                    [`${ind.id}-l1`, bands.lower1, sty.band1Color ?? "#ff980066", "-1σ"],
+                    [`${ind.id}-u2`, bands.upper2, sty.band2Color ?? "#ff980044", "+2σ"],
+                    [`${ind.id}-l2`, bands.lower2, sty.band2Color ?? "#ff980044", "-2σ"],
+                    [`${ind.id}-u3`, bands.upper3, sty.band3Color ?? "#ff980022", "+3σ"],
+                    [`${ind.id}-l3`, bands.lower3, sty.band3Color ?? "#ff980022", "-3σ"],
+                  ];
+                  for (const [id, arr, color] of bandPairs) {
+                    const v = arr[arr.length-1]; if (!isNaN(v)) { const y = cs.priceToCoordinate(v); if (y != null) labels.push({ id, y, value: v, color }); }
+                  }
+                }
+              } else if (ind.type === "BB") {
                 const { upper, mid, lower } = calcBB(closes, Number(ind.inputs.period), Number(ind.inputs.std));
                 for (const [sfx, arr, ck] of [["u",upper,"upperColor"],["m",mid,"midColor"],["l",lower,"lowerColor"]] as [string,number[],string][]) {
                   const last = arr[arr.length-1]; if (!isNaN(last)) { const y = cs.priceToCoordinate(last); if (y != null) labels.push({ id: `${ind.id}-${sfx}`, y, value: last, color: sty[ck] ?? "#2196f3" }); }
+                }
+              } else if (ind.type === "Pivot") {
+                const pivots = calcPivots(sorted, String(ind.inputs.pivotType ?? "standard"), String(ind.inputs.period ?? "daily"));
+                if (pivots) {
+                  const levels: [string, number, string, string][] = [
+                    ["pp", pivots.pp, sty.ppColor ?? "#2196f3", "PP"],
+                    ["r1", pivots.r1, sty.rColor ?? "#26a69a", "R1"],
+                    ["r2", pivots.r2, sty.rColor ?? "#26a69a", "R2"],
+                    ["r3", pivots.r3, sty.rColor ?? "#26a69a", "R3"],
+                    ["s1", pivots.s1, sty.sColor ?? "#ef5350", "S1"],
+                    ["s2", pivots.s2, sty.sColor ?? "#ef5350", "S2"],
+                    ["s3", pivots.s3, sty.sColor ?? "#ef5350", "S3"],
+                    ...(pivots.r4 != null ? [["r4", pivots.r4, sty.rColor ?? "#26a69a", "R4"] as [string,number,string,string]] : []),
+                    ...(pivots.s4 != null ? [["s4", pivots.s4, sty.sColor ?? "#ef5350", "S4"] as [string,number,string,string]] : []),
+                  ];
+                  for (const [sfx, val, color, tag] of levels) {
+                    const y = cs.priceToCoordinate(val); if (y != null) labels.push({ id: `${ind.id}-${sfx}`, y, value: val, color, tag });
+                  }
                 }
               }
             }
@@ -380,7 +470,8 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
             return <>{labels.map((l) => {
               const h = l.isPrice && l.countdown ? 32 : LH;
               return <div key={l.id} style={{ position: "absolute", top: Math.round(l.y) - h/2, right: 0, width: sw, height: h, background: l.color, color: contrastText(l.color), fontFamily: "monospace", fontWeight: l.isPrice ? 700 : 500, fontSize: 10, textAlign: "center", pointerEvents: "none", zIndex: 20, userSelect: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontSize: l.isPrice ? 11 : 10, lineHeight: "16px" }}>{l.value.toFixed(2)}</span>
+                {l.tag ? <span style={{ fontSize: 9, lineHeight: "14px", opacity: 0.9 }}>{l.tag}</span> : null}
+                <span style={{ fontSize: l.isPrice ? 11 : 10, lineHeight: "14px" }}>{l.value.toFixed(2)}</span>
                 {l.countdown && <span style={{ fontSize: 10, lineHeight: "14px", opacity: 0.92 }}>{l.countdown}</span>}
               </div>;
             })}</>;
