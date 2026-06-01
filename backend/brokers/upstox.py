@@ -37,7 +37,11 @@ _KEY_TO_SYMBOL: dict[str, str] = {}
 
 
 def _load_instruments(exchange: str) -> dict[str, str]:
-    """Download and cache Upstox instruments (trading_symbol → instrument_key) for EQ type."""
+    """Download and cache Upstox instruments (trading_symbol → instrument_key).
+
+    EQ exchanges (NSE/BSE): only EQ type.
+    Derivatives exchanges (NFO/BFO): all types (CE/PE/FUT) for options/futures lookup.
+    """
     if exchange in _INSTRUMENTS_CACHE:
         return _INSTRUMENTS_CACHE[exchange]
     try:
@@ -45,10 +49,11 @@ def _load_instruments(exchange: str) -> dict[str, str]:
         url  = f"https://assets.upstox.com/market-quote/instruments/exchange/{exchange}.json.gz"
         resp = _httpx.get(url, timeout=30, follow_redirects=True)
         data = _json.loads(gzip.decompress(resp.content))
+        eq_only = exchange not in ("NFO", "BFO", "CDS", "MCX")
         mapping = {
             item["trading_symbol"]: item["instrument_key"]
             for item in data
-            if item.get("instrument_type") == "EQ"
+            if not eq_only or item.get("instrument_type") == "EQ"
         }
         _INSTRUMENTS_CACHE[exchange] = mapping
         return mapping
@@ -165,7 +170,7 @@ class UpstoxAdapter:
     """
 
     name = "upstox"
-    prefixes = ["NSE", "BSE"]
+    prefixes = ["NSE", "BSE", "NFO", "BFO"]
 
     def __init__(self, api_key: str, api_secret: str, redis_client) -> None:
         self._api_key = api_key
