@@ -219,10 +219,21 @@ class MarketData:
         if kite_interval is None:
             return pd.DataFrame()
 
-        session_file = Path(__file__).parent.parent / "scripts" / ".kitemcp_session"
-        if not session_file.exists():
+        # Prefer Redis session (set by /auth/kite/init), fall back to file
+        session_id = ""
+        try:
+            import redis as _redis_lib
+            from core.config import settings as _settings
+            _r = _redis_lib.from_url(_settings.REDIS_URL, decode_responses=True)
+            session_id = _r.get("kite:session_id") or ""
+        except Exception:
+            pass
+        if not session_id:
+            session_file = Path(__file__).parent.parent / "scripts" / ".kitemcp_session"
+            if session_file.exists():
+                session_id = session_file.read_text().strip()
+        if not session_id:
             return pd.DataFrame()
-        session_id = session_file.read_text().strip()
 
         from workers.activities.fetch_kitemcp_1min import _kite_limiter
 

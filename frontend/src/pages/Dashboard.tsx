@@ -10,23 +10,48 @@ import { apiClient, isAuthenticated } from "../api/client";
 const TV = { bg: "#0d0d1a", border: "#2a2e39", text: "#d1d4dc", muted: "#787b86", accent: "#2962ff" } as const;
 const PANE_COUNTS = [1, 2, 4, 6, 8] as const;
 
+function BrokerBtn({
+  connected, label, onConnect, popupBlocked, children,
+}: {
+  connected: boolean; label: string; onConnect: () => void;
+  popupBlocked?: boolean; children?: React.ReactNode;
+}) {
+  const color = connected ? "#26a69a" : popupBlocked ? "#ef5350" : TV.muted;
+  const bg    = connected ? "#26a69a22" : popupBlocked ? "#ef535022" : "transparent";
+  const border = connected ? "#26a69a" : popupBlocked ? "#ef5350" : TV.border;
+  return (
+    <button
+      onClick={connected ? undefined : onConnect}
+      title={popupBlocked ? "Popup blocked — allow popups for localhost and try again" : undefined}
+      style={{
+        background: bg, border: `1px solid ${border}`, borderRadius: 4,
+        color, fontSize: 11, padding: "4px 10px",
+        cursor: connected ? "default" : "pointer",
+        display: "flex", alignItems: "center", gap: 5,
+      }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block" }} />
+      {children ?? (connected ? label : popupBlocked ? "Allow popups & retry" : `Connect ${label}`)}
+    </button>
+  );
+}
+
 function TopBar() {
   const { paneCount, setPaneCount } = useDashboardStore();
   const brokerStatus   = useLiveQuotesStore((s) => s.brokerStatus);
   const upstoxHasToken = useLiveQuotesStore((s) => s.upstoxHasToken);
+  const kiteConnected  = useLiveQuotesStore((s) => s.kiteConnected);
+  const kiteUser       = useLiveQuotesStore((s) => s.kiteUser);
   const isUpstoxConnected = brokerStatus["upstox"] === "connected";
   const isHlConnected     = brokerStatus["hyperliquid"] === "connected";
 
-  const [popupBlocked, setPopupBlocked] = useState(false);
+  const [upstoxPopupBlocked, setUpstoxPopupBlocked] = useState(false);
+  const [kiteLoading, setKiteLoading] = useState(false);
 
   const openUpstoxLogin = () => {
-    const popup = window.open(
-      "http://localhost:8000/auth/upstox/login",
-      "upstox-login",
-      "width=500,height=700,resizable=yes"
-    );
-    if (!popup) setPopupBlocked(true);
-    else setPopupBlocked(false);
+    const popup = window.open("http://localhost:8000/auth/upstox/login", "upstox-login", "width=500,height=700,resizable=yes");
+    if (!popup) setUpstoxPopupBlocked(true);
+    else setUpstoxPopupBlocked(false);
   };
 
   const reconnectUpstox = async () => {
@@ -36,6 +61,40 @@ function TopBar() {
   const reconnectHyperliquid = async () => {
     try { await apiClient.post("/auth/hyperliquid/reconnect"); } catch { /* ignore */ }
   };
+
+  const connectKite = async () => {
+    setKiteLoading(true);
+    try {
+      const { data } = await apiClient.get("/auth/kite/init");
+      if (data.auth_url) {
+        const popup = window.open(data.auth_url, "kite-login", "width=500,height=700,resizable=yes");
+        if (popup) {
+          // Poll status until authenticated (max 3 min)
+          const poll = setInterval(async () => {
+            try {
+              const { data: s } = await apiClient.get("/auth/kite/status");
+              if (s.connected) {
+                useLiveQuotesStore.getState().setKiteStatus(true, s.user);
+                clearInterval(poll);
+                setKiteLoading(false);
+                popup.close();
+              }
+            } catch { /* ignore */ }
+          }, 3000);
+          setTimeout(() => { clearInterval(poll); setKiteLoading(false); }, 180_000);
+        }
+      }
+    } catch {
+      setKiteLoading(false);
+    }
+  };
+
+  // Check Kite status on mount
+  useEffect(() => {
+    apiClient.get("/auth/kite/status").then(({ data }) => {
+      useLiveQuotesStore.getState().setKiteStatus(data.connected, data.user);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const ALLOWED = new Set(["http://localhost:8000", "http://127.0.0.1:8000"]);
@@ -83,49 +142,27 @@ function TopBar() {
 
       <div style={{ flex: 1 }} />
 
-      {/* Hyperliquid status / reconnect */}
-      <button
-        onClick={isHlConnected ? undefined : reconnectHyperliquid}
-        style={{
-          background: isHlConnected ? "#26a69a22" : "transparent",
-          border: `1px solid ${isHlConnected ? "#26a69a" : TV.border}`,
-          borderRadius: 4, color: isHlConnected ? "#26a69a" : TV.muted,
-          fontSize: 11, padding: "4px 10px",
-          cursor: isHlConnected ? "default" : "pointer",
-          display: "flex", alignItems: "center", gap: 5,
-        }}
-      >
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: isHlConnected ? "#26a69a" : "#787b86", display: "inline-block" }} />
+      {/* Hyperliquid */}
+      <BrokerBtn connected={isHlConnected} label="Hyperliquid" onConnect={reconnectHyperliquid}>
         {isHlConnected ? "Hyperliquid" : "Reconnect HL"}
-      </button>
+      </BrokerBtn>
 
-      {/* Connect / Reconnect Upstox */}
-      <button
-        onClick={isUpstoxConnected ? undefined : upstoxHasToken ? reconnectUpstox : openUpstoxLogin}
-        title={popupBlocked ? "Popup blocked — allow popups for localhost and try again" : undefined}
-        style={{
-          background: isUpstoxConnected ? "#26a69a22" : popupBlocked ? "#ef535022" : "transparent",
-          border: `1px solid ${isUpstoxConnected ? "#26a69a" : popupBlocked ? "#ef5350" : TV.border}`,
-          borderRadius: 4,
-          color: isUpstoxConnected ? "#26a69a" : popupBlocked ? "#ef5350" : TV.muted,
-          fontSize: 11, padding: "4px 10px",
-          cursor: isUpstoxConnected ? "default" : "pointer",
-          display: "flex", alignItems: "center", gap: 5,
-        }}
+      {/* Upstox */}
+      <BrokerBtn
+        connected={isUpstoxConnected} label="Upstox"
+        onConnect={upstoxHasToken ? reconnectUpstox : openUpstoxLogin}
+        popupBlocked={upstoxPopupBlocked}
       >
-        {isUpstoxConnected ? (
-          <>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#26a69a", display: "inline-block" }} />
-            Upstox
-          </>
-        ) : popupBlocked ? (
-          "Allow popups & retry"
-        ) : upstoxHasToken ? (
-          "Reconnect Upstox"
-        ) : (
-          "Connect Upstox"
-        )}
-      </button>
+        {isUpstoxConnected ? "Upstox" : upstoxHasToken ? "Reconnect Upstox" : undefined}
+      </BrokerBtn>
+
+      {/* Kite */}
+      <BrokerBtn
+        connected={kiteConnected} label="Kite"
+        onConnect={connectKite}
+      >
+        {kiteConnected ? (kiteUser ? `Kite · ${kiteUser}` : "Kite") : kiteLoading ? "Connecting…" : undefined}
+      </BrokerBtn>
     </div>
   );
 }
