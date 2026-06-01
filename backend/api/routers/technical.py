@@ -19,6 +19,22 @@ _CACHE_TTL = 300  # seconds
 _build_lock = asyncio.Lock()
 
 
+def _normalize_symbol(sym: str) -> str:
+    """Convert DB index format to canonical search format.
+
+    NSE_NIFTY_50   → NIFTY 50    (frontend adds NSE: → NSE:NIFTY 50)
+    NSE_NIFTY_BANK → NIFTY BANK
+    BSE_SENSEX     → BSE:SENSEX  (full canonical — frontend must not add NSE:)
+    Regular stocks (e.g. RELIANCE) pass through unchanged.
+    """
+    if sym.startswith("NSE_"):
+        # Strip NSE_ prefix, replace remaining _ with space
+        return sym[4:].replace("_", " ")
+    if sym.startswith("BSE_"):
+        return "BSE:" + sym[4:].replace("_", " ")
+    return sym
+
+
 async def _build_symbol_cache() -> list[str]:
     from core.db import AsyncSessionLocal
     from sqlalchemy import text
@@ -27,7 +43,8 @@ async def _build_symbol_cache() -> list[str]:
     # Index symbols (NSE_/BSE_) were seeded into stocks table once.
     async with AsyncSessionLocal() as session:
         result = await session.execute(text("SELECT symbol FROM stocks ORDER BY symbol"))
-        return [r[0] for r in result.fetchall()]
+        raw = [r[0] for r in result.fetchall()]
+    return [_normalize_symbol(s) for s in raw]
 
 
 async def warm_symbol_cache() -> None:

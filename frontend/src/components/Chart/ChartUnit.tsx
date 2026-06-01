@@ -421,7 +421,7 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
               } else if (ind.type === "VWAP") {
                 const bands = calcVWAPBands(sorted);
                 const last = bands.vwap[bands.vwap.length-1];
-                if (!isNaN(last)) { const y = cs.priceToCoordinate(last); if (y != null) labels.push({ id: ind.id, y, value: last, color: sty.color ?? "#ff9800", tag: "V" }); }
+                if (!isNaN(last)) { const y = cs.priceToCoordinate(last); if (y != null) labels.push({ id: ind.id, y, value: last, color: sty.color ?? "#ff9800" }); }
                 if (ind.inputs.showBands) {
                   const bandPairs: [string, number[], string, string][] = [
                     [`${ind.id}-u1`, bands.upper1, sty.band1Color ?? "#ff980066", "+1σ"],

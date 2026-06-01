@@ -58,13 +58,17 @@ def _load_instruments(exchange: str) -> dict[str, str]:
 
 
 def _to_upstox_ws_key(symbol: str) -> str:
-    """Instrument key for the v3 WebSocket feed — uses trading-symbol format.
+    """Instrument key for the v3 WebSocket feed.
+
+    Indices use hardcoded name-based keys; equities require ISIN-based keys
+    (same format as REST API) — NSE_EQ|<ISIN>, NOT NSE_EQ|<ticker>.
 
     Examples::
 
-        'NSE:HDFCBANK'  → 'NSE_EQ|HDFCBANK'
+        'NSE:HDFCBANK'  → 'NSE_EQ|INE040A01034'
         'NSE:NIFTY 50'  → 'NSE_INDEX|Nifty 50'
     """
+    # Indices — use hardcoded correct-case keys
     if symbol in _INDEX_INSTRUMENT_KEYS:
         key = _INDEX_INSTRUMENT_KEYS[symbol]
         _KEY_TO_SYMBOL[key] = symbol
@@ -72,6 +76,13 @@ def _to_upstox_ws_key(symbol: str) -> str:
     if ":" not in symbol:
         return symbol
     exch, ticker = symbol.split(":", 1)
+    # Equities — must use ISIN-based instrument key
+    mapping = _load_instruments(exch)
+    if ticker in mapping:
+        key = mapping[ticker]
+        _KEY_TO_SYMBOL[key] = symbol
+        return key
+    # Fallback (should rarely happen)
     key = f"{exch}_EQ|{ticker}"
     _KEY_TO_SYMBOL[key] = symbol
     return key
@@ -205,7 +216,17 @@ class UpstoxAdapter:
             log.warning("upstox_no_token: call /auth/upstox/login first")
             return
         ws_url = await self._get_ws_url(token)
-        self._ws = await websockets.connect(ws_url)
+        try:
+            self._ws = await websockets.connect(ws_url)
+        except websockets.exceptions.InvalidStatus as exc:
+            if exc.response.status_code in (401, 403):
+                # Token expired — clear from Redis so UI shows "Connect" not "Reconnect"
+                try:
+                    await self._redis.delete("upstox:token")
+                    log.warning("upstox_token_rejected status=%d: cleared token", exc.response.status_code)
+                except Exception:
+                    pass
+            raise
         self._running = True
         log.info("upstox_connected url=%s", ws_url[:60])
         asyncio.create_task(self._recv_loop())
@@ -265,17 +286,45 @@ class UpstoxAdapter:
     # ------------------------------------------------------------------ #
 
     async def _recv_loop(self) -> None:
-        try:
-            async for raw in self._ws:
-                if isinstance(raw, bytes):
-                    self._decode_and_enqueue(raw)
-        except websockets.exceptions.ConnectionClosedOK:
-            log.info("upstox_ws_closed_clean")
-        except Exception as exc:
-            log.warning("upstox_recv_error error=%s", exc)
-        finally:
-            self._running = False
-            self._ws = None
+        while True:
+            try:
+                async for raw in self._ws:
+                    if isinstance(raw, bytes):
+                        self._decode_and_enqueue(raw)
+            except websockets.exceptions.ConnectionClosedOK:
+                log.info("upstox_ws_closed_clean")
+            except Exception as exc:
+                log.warning("upstox_recv_error error=%s", exc)
+            finally:
+                self._running = False
+                self._ws = None
+
+            # Auto-reconnect with exponential backoff (stops if token invalid)
+            for delay in (2, 5, 10, 30, 60):
+                log.info("upstox_reconnecting in=%ds", delay)
+                await asyncio.sleep(delay)
+                try:
+                    token = await self._get_token()
+                    if not token:
+                        log.warning("upstox_reconnect_no_token — user must re-login")
+                        return
+                    ws_url = await self._get_ws_url(token)
+                    self._ws = await websockets.connect(ws_url)
+                    self._running = True
+                    log.info("upstox_reconnected url=%s", ws_url[:60])
+                    if self._subscribed:
+                        await self.subscribe(list(self._subscribed))
+                    break
+                except websockets.exceptions.InvalidStatus as exc:
+                    if exc.response.status_code in (401, 403):
+                        log.warning("upstox_reconnect_token_rejected status=%d — user must re-login", exc.response.status_code)
+                        return  # Don't retry with bad token
+                    log.warning("upstox_reconnect_failed error=%s", exc)
+                except Exception as exc:
+                    log.warning("upstox_reconnect_failed error=%s", exc)
+            else:
+                log.error("upstox_reconnect_exhausted — giving up")
+                return
 
     def _decode_and_enqueue(self, data: bytes) -> None:
         """Decode a FeedResponse protobuf frame and push Quote(s) onto the queue.
