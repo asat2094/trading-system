@@ -262,7 +262,7 @@ function SettingsLayer({ paneId, indicator, onBack, mode, local }: SettingsLayer
 }
 
 export default function IndicatorPanel({ paneId, indicators, onClose, mode = "individual", local }: Props) {
-  const { addIndicator, addIndicatorToAll, removeIndicator, removeIndicatorFromAll, removeIndicatorByLinkId } = useDashboardStore();
+  const { addIndicator, addIndicatorToAll, removeIndicator, removeIndicatorByLinkId } = useDashboardStore();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<IndicatorConfig | null>(null);
 

@@ -27,6 +27,9 @@ export const STUDY_DEFAULTS: { [K in StudyType]: Omit<Extract<StudyConfig, { typ
   Pivot:         { type: "Pivot",         pivotType: "standard", period: "daily", ppColor: "#2196f3", rColor: "#26a69a", sColor: "#ef5350" },
 };
 
+export const OVERLAY_TYPES: StudyType[]    = ["EMA", "SMA", "BB", "VWAP", "Pivot", "VolumeProfile", "FVG"];
+export const OSCILLATOR_TYPES: StudyType[] = ["RSI", "MACD", "Stoch"];
+
 export function studyLabel(s: StudyConfig): string {
   switch (s.type) {
     case "EMA":           return `EMA(${s.period})`;

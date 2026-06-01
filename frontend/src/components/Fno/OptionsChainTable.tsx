@@ -86,8 +86,8 @@ interface Props {
   onOpenChart: (symbol: string, label: string) => void;
 }
 
-export default function OptionsChainTable({ snapshot, indexName: _indexName, wsSymbol, indexLabel, onOpenChart }: Props) {
-  void _indexName;
+export default function OptionsChainTable({ snapshot, indexName: _indexName, wsSymbol: _wsSymbol, indexLabel, onOpenChart }: Props) {
+  void _indexName; void _wsSymbol;
   return (
     <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "70vh" }}>
       <style>{`
