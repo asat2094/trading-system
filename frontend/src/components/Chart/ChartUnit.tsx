@@ -42,7 +42,7 @@ export const TF_MS: Record<string, number> = {
 
 export const TF_DAYS: Record<string, number> = {
   "1min": 3, "5min": 7, "15min": 14, "30min": 21,
-  "1h": 60, "4h": 120, "1d": 365, "1w": 730,
+  "1h": 60, "4h": 120, "1d": 90, "1w": 365,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -112,6 +112,7 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
   const [bars, setBars]           = useState<Bar[]>([]);
   const [liveBar, setLiveBar]     = useState<Bar | null>(null);
   const [loading, setLoading]     = useState(false);
+  const [fitKey, setFitKey]       = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
   const [priceLabel, setPriceLabel] = useState<{
     price: number; countdown: string; y: number; isUp: boolean;
@@ -149,6 +150,7 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
       const fetched = await loadBars(symbol, timeframe, fromDt, toDt);
       barsRef.current = fetched;
       setBars(fetched);
+      setFitKey((k) => k + 1);
     } catch (err) { console.error("ChartUnit loadInitial", err); }
     finally { setLoading(false); }
   }, [symbol, timeframe, loadBars]);
@@ -291,6 +293,7 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
               onNeedMoreData={handleNeedMoreData}
               tfOffsetSec={(TF_MS[timeframe] ?? 0) / 1000}
               onVisibleRangeChange={() => setRenderTick((t) => t + 1)}
+              fitKey={fitKey}
             />
           )}
 

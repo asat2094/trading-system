@@ -79,10 +79,12 @@ interface Props {
   tfOffsetSec?: number;
   /** Called whenever the visible time range changes (pan / zoom). Use to re-render drawing overlays. */
   onVisibleRangeChange?: () => void;
+  /** Increment to force fitContent on symbol/timeframe change (full reload). */
+  fitKey?: number;
 }
 
 const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChart(
-  { bars, studies, onNeedMoreData, tfOffsetSec = 0, onVisibleRangeChange },
+  { bars, studies, onNeedMoreData, tfOffsetSec = 0, onVisibleRangeChange, fitKey = 0 },
   ref
 ) {
   const containerRef          = useRef<HTMLDivElement>(null);
@@ -97,6 +99,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
   useEffect(() => { onNeedMoreRef.current = onNeedMoreData; }, [onNeedMoreData]);
   useEffect(() => { onVisibleRangeRef.current = onVisibleRangeChange; }, [onVisibleRangeChange]);
+  useEffect(() => { didFitContent.current = false; }, [fitKey]);
 
   // ── Create chart once ──────────────────────────────────────────────────────
   useEffect(() => {
