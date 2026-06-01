@@ -69,7 +69,10 @@ export default function PaneControls({ paneId, symbol, timeframe }: Props) {
         const { data } = await apiClient.get("/technical/symbols", {
           params: { q, limit: 15 }, signal: ctrl.signal,
         });
-        const nse: string[] = (data.symbols ?? []).map((s: string) => `NSE:${s}`);
+        // Symbols already containing ":" are fully canonical (e.g. BSE:SENSEX)
+        const nse: string[] = (data.symbols ?? []).map((s: string) =>
+          s.includes(":") ? s : `NSE:${s}`
+        );
         const all = [...crypto, ...nse].slice(0, 20);
         setResults(all);
         if (all.length > 0 && inputRef.current) {

@@ -28,6 +28,51 @@ RESAMPLE_FREQ: dict[str, str | None] = {
 
 _UPSTOX_BASE = "https://api.upstox.com/v2"
 
+# Hardcoded index mappings (canonical symbol → Upstox historical-candle instrument key)
+_INDEX_UPSTOX_KEYS: dict[str, str] = {
+    "NSE:NIFTY 50":         "NSE_INDEX|Nifty 50",
+    "NSE:NIFTY BANK":       "NSE_INDEX|Nifty Bank",
+    "NSE:NIFTY MID SELECT": "NSE_INDEX|NIFTY MID SELECT",
+    "BSE:SENSEX":           "BSE_INDEX|SENSEX",
+}
+
+# Cache: exchange → {trading_symbol: instrument_key}
+_INSTRUMENTS_CACHE: dict[str, dict[str, str]] = {}
+
+def _load_instruments(exchange: str) -> dict[str, str]:
+    """Download Upstox instruments file and return trading_symbol → instrument_key for EQ type."""
+    global _INSTRUMENTS_CACHE
+    if exchange in _INSTRUMENTS_CACHE:
+        return _INSTRUMENTS_CACHE[exchange]
+    try:
+        import gzip, json, httpx as _httpx
+        url  = f"https://assets.upstox.com/market-quote/instruments/exchange/{exchange}.json.gz"
+        resp = _httpx.get(url, timeout=30, follow_redirects=True)
+        data = json.loads(gzip.decompress(resp.content))
+        mapping = {
+            item["trading_symbol"]: item["instrument_key"]
+            for item in data
+            if item.get("instrument_type") == "EQ"
+        }
+        _INSTRUMENTS_CACHE[exchange] = mapping
+        return mapping
+    except Exception:
+        return {}
+
+def _upstox_historical_key(symbol: str) -> str:
+    """Return the correct Upstox instrument key for historical-candle API calls."""
+    if symbol in _INDEX_UPSTOX_KEYS:
+        return _INDEX_UPSTOX_KEYS[symbol]
+    if ":" not in symbol:
+        return symbol
+    exch, ticker = symbol.split(":", 1)
+    mapping = _load_instruments(exch)
+    if ticker in mapping:
+        return mapping[ticker]
+    # Fallback: use WebSocket-style key (may not work for historical API)
+    from brokers.upstox import _to_upstox_key
+    return _to_upstox_key(symbol)
+
 # (upstox_interval, resample_tf_or_None)
 # For TFs without native Upstox support, fetch finer interval and resample.
 _UPSTOX_INTERVAL: dict[str, tuple[str, str | None]] = {
@@ -283,19 +328,20 @@ class MarketData:
         if not token:
             return pd.DataFrame()
 
-        from brokers.upstox import _to_upstox_key
-        instrument_key = _to_upstox_key(symbol)
+        from urllib.parse import quote
+        instrument_key = _upstox_historical_key(symbol)
+        encoded_key = quote(instrument_key, safe="")   # encode | as %7C
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
         def _fetch_historical(from_d: str, to_d: str) -> list:
-            url = f"{_UPSTOX_BASE}/historical-candle/{instrument_key}/{upstox_interval}/{to_d}/{from_d}"
+            url = f"{_UPSTOX_BASE}/historical-candle/{encoded_key}/{upstox_interval}/{to_d}/{from_d}"
             resp = httpx.get(url, headers=headers, timeout=20)
             if resp.status_code == 200:
                 return resp.json().get("data", {}).get("candles", [])
             return []
 
         def _fetch_intraday() -> list:
-            url = f"{_UPSTOX_BASE}/historical-candle/intraday/{instrument_key}/{upstox_interval}"
+            url = f"{_UPSTOX_BASE}/historical-candle/intraday/{encoded_key}/{upstox_interval}"
             resp = httpx.get(url, headers=headers, timeout=20)
             if resp.status_code == 200:
                 return resp.json().get("data", {}).get("candles", [])

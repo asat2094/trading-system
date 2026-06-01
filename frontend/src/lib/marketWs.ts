@@ -47,18 +47,32 @@ function handleMessage(evt: MessageEvent) {
 
 export function connect(token: string) {
   _token = token;
-  if (ws && ws.readyState !== WebSocket.CLOSED) return;
+  if (ws && ws.readyState !== WebSocket.CLOSED) {
+    console.log("[marketWs] connect: already open/connecting, state=", ws.readyState);
+    return;
+  }
 
-  ws = new WebSocket(`${API_BASE}/ws/market?token=${encodeURIComponent(token)}`);
+  const url = `${API_BASE}/ws/market?token=${encodeURIComponent(token)}`;
+  console.log("[marketWs] connecting to", url.slice(0, 60));
+  ws = new WebSocket(url);
   ws.onmessage = handleMessage;
 
   ws.onopen = () => {
+    console.log("[marketWs] connected");
     const symbols = Array.from(refCounts.keys()).filter((s) => (refCounts.get(s) ?? 0) > 0);
+    console.log("[marketWs] subscribing on open:", symbols);
     if (symbols.length) send({ action: "subscribe", symbols });
   };
 
-  ws.onclose = () => {
+  ws.onclose = (evt) => {
+    console.log("[marketWs] closed code=", evt.code);
+    ws = null;
     reconnectTimer = setTimeout(() => connect(_token), 3000);
+  };
+
+  ws.onerror = (err) => {
+    console.error("[marketWs] error", err);
+    ws?.close();
   };
 }
 

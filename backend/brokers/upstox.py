@@ -22,31 +22,106 @@ _UPSTOX_FEED_AUTH = "https://api.upstox.com/v3/feed/market-data-feed/authorize"
 # Upstox sends "1d" for the day OHLC entry inside MarketOHLC.
 _DAY_INTERVAL = "1d"
 
-_NSE_INDICES = {
-    "NIFTY 50", "NIFTY50", "BANKNIFTY", "NIFTY BANK",
-    "MIDCPNIFTY", "FINNIFTY", "SENSEX",
+# Correct instrument keys for indices (WS feed uses these exact strings)
+_INDEX_INSTRUMENT_KEYS: dict[str, str] = {
+    "NSE:NIFTY 50":         "NSE_INDEX|Nifty 50",
+    "NSE:NIFTY BANK":       "NSE_INDEX|Nifty Bank",
+    "NSE:NIFTY MID SELECT": "NSE_INDEX|NIFTY MID SELECT",
+    "BSE:SENSEX":           "BSE_INDEX|SENSEX",
 }
 
+# In-process instruments cache: exchange → {trading_symbol: instrument_key}
+_INSTRUMENTS_CACHE: dict[str, dict[str, str]] = {}
+# Reverse: instrument_key → canonical symbol
+_KEY_TO_SYMBOL: dict[str, str] = {}
 
-def _to_upstox_key(symbol: str) -> str:
-    """Convert canonical symbol to Upstox instrument key.
+
+def _load_instruments(exchange: str) -> dict[str, str]:
+    """Download and cache Upstox instruments (trading_symbol → instrument_key) for EQ type."""
+    if exchange in _INSTRUMENTS_CACHE:
+        return _INSTRUMENTS_CACHE[exchange]
+    try:
+        import gzip, json as _json, httpx as _httpx
+        url  = f"https://assets.upstox.com/market-quote/instruments/exchange/{exchange}.json.gz"
+        resp = _httpx.get(url, timeout=30, follow_redirects=True)
+        data = _json.loads(gzip.decompress(resp.content))
+        mapping = {
+            item["trading_symbol"]: item["instrument_key"]
+            for item in data
+            if item.get("instrument_type") == "EQ"
+        }
+        _INSTRUMENTS_CACHE[exchange] = mapping
+        return mapping
+    except Exception as exc:
+        log.warning("upstox_instruments_load_failed exchange=%s error=%s", exchange, exc)
+        return {}
+
+
+def _to_upstox_ws_key(symbol: str) -> str:
+    """Instrument key for the v3 WebSocket feed.
+
+    Indices use hardcoded name-based keys; equities require ISIN-based keys
+    (same format as REST API) — NSE_EQ|<ISIN>, NOT NSE_EQ|<ticker>.
 
     Examples::
 
-        'NSE:RELIANCE'  → 'NSE_EQ|RELIANCE'
-        'NSE:NIFTY 50'  → 'NSE_INDEX|NIFTY 50'
+        'NSE:HDFCBANK'  → 'NSE_EQ|INE040A01034'
+        'NSE:NIFTY 50'  → 'NSE_INDEX|Nifty 50'
     """
+    # Indices — use hardcoded correct-case keys
+    if symbol in _INDEX_INSTRUMENT_KEYS:
+        key = _INDEX_INSTRUMENT_KEYS[symbol]
+        _KEY_TO_SYMBOL[key] = symbol
+        return key
     if ":" not in symbol:
         return symbol
     exch, ticker = symbol.split(":", 1)
-    normalised = ticker.upper().replace(" ", "")
-    if normalised in {i.upper().replace(" ", "") for i in _NSE_INDICES}:
-        return f"{exch}_INDEX|{ticker}"
-    return f"{exch}_EQ|{ticker}"
+    # Equities — must use ISIN-based instrument key
+    mapping = _load_instruments(exch)
+    if ticker in mapping:
+        key = mapping[ticker]
+        _KEY_TO_SYMBOL[key] = symbol
+        return key
+    # Fallback (should rarely happen)
+    key = f"{exch}_EQ|{ticker}"
+    _KEY_TO_SYMBOL[key] = symbol
+    return key
+
+
+def _to_upstox_key(symbol: str) -> str:
+    """Convert canonical symbol → Upstox instrument key (ISIN-based for equities).
+
+    Uses instruments file for equities so the key works with both WS and REST API.
+    Indices use hardcoded correct-case keys.
+
+    Examples::
+
+        'NSE:HDFCBANK'  → 'NSE_EQ|INE040A01034'
+        'NSE:NIFTY 50'  → 'NSE_INDEX|Nifty 50'
+    """
+    if symbol in _INDEX_INSTRUMENT_KEYS:
+        key = _INDEX_INSTRUMENT_KEYS[symbol]
+        _KEY_TO_SYMBOL[key] = symbol
+        return key
+    if ":" not in symbol:
+        return symbol
+    exch, ticker = symbol.split(":", 1)
+    mapping = _load_instruments(exch)
+    if ticker in mapping:
+        key = mapping[ticker]
+        _KEY_TO_SYMBOL[key] = symbol
+        return key
+    # Fallback for unknown symbols
+    key = f"{exch}_EQ|{ticker}"
+    _KEY_TO_SYMBOL[key] = symbol
+    return key
 
 
 def _from_upstox_key(instrument_key: str) -> str:
     """Convert Upstox instrument key back to canonical 'EXCH:TICKER' form."""
+    # Check reverse lookup first (populated when we subscribed)
+    if instrument_key in _KEY_TO_SYMBOL:
+        return _KEY_TO_SYMBOL[instrument_key]
     return (
         instrument_key
         .replace("_EQ|", ":")
@@ -141,38 +216,55 @@ class UpstoxAdapter:
             log.warning("upstox_no_token: call /auth/upstox/login first")
             return
         ws_url = await self._get_ws_url(token)
-        self._ws = await websockets.connect(ws_url)
+        try:
+            self._ws = await websockets.connect(ws_url)
+        except websockets.exceptions.InvalidStatus as exc:
+            if exc.response.status_code in (401, 403):
+                # Token expired — clear from Redis so UI shows "Connect" not "Reconnect"
+                try:
+                    await self._redis.delete("upstox:token")
+                    log.warning("upstox_token_rejected status=%d: cleared token", exc.response.status_code)
+                except Exception:
+                    pass
+            raise
         self._running = True
         log.info("upstox_connected url=%s", ws_url[:60])
         asyncio.create_task(self._recv_loop())
+        # Re-subscribe any symbols from a previous connection
+        if self._subscribed:
+            await self.subscribe(list(self._subscribed))
 
     async def subscribe(self, symbols: list[str]) -> None:
-        """Subscribe to full-mode feed for the given canonical symbols."""
+        """Subscribe to full-mode feed for the given canonical symbols.
+
+        Upstox v3 WS requires subscription messages sent as BINARY (bytes),
+        not as text frames. Uses ticker-symbol keys (NSE_EQ|HDFCBANK), not ISINs.
+        """
         if not self._ws:
             log.warning("upstox_subscribe_skipped: not connected")
             return
-        keys = [_to_upstox_key(s) for s in symbols]
+        keys = [_to_upstox_ws_key(s) for s in symbols]
         self._subscribed.update(symbols)
         msg = json.dumps({
             "guid": "mf-sub",
             "method": "sub",
             "data": {"mode": "full", "instrumentKeys": keys},
-        })
+        }).encode()                       # ← must be binary, not text
         await self._ws.send(msg)
-        log.debug("upstox_subscribed keys=%s", keys)
+        log.info("upstox_subscribed keys=%s", keys)
 
     async def unsubscribe(self, symbols: list[str]) -> None:
         """Unsubscribe from feed for the given canonical symbols."""
         if not self._ws:
             return
-        keys = [_to_upstox_key(s) for s in symbols]
+        keys = [_to_upstox_ws_key(s) for s in symbols]
         for s in symbols:
             self._subscribed.discard(s)
         msg = json.dumps({
             "guid": "mf-unsub",
             "method": "unsub",
             "data": {"instrumentKeys": keys},
-        })
+        }).encode()                       # ← must be binary
         await self._ws.send(msg)
         log.debug("upstox_unsubscribed keys=%s", keys)
 
@@ -194,17 +286,45 @@ class UpstoxAdapter:
     # ------------------------------------------------------------------ #
 
     async def _recv_loop(self) -> None:
-        try:
-            async for raw in self._ws:
-                if isinstance(raw, bytes):
-                    self._decode_and_enqueue(raw)
-        except websockets.exceptions.ConnectionClosedOK:
-            log.info("upstox_ws_closed_clean")
-        except Exception as exc:
-            log.warning("upstox_recv_error error=%s", exc)
-        finally:
-            self._running = False
-            self._ws = None
+        while True:
+            try:
+                async for raw in self._ws:
+                    if isinstance(raw, bytes):
+                        self._decode_and_enqueue(raw)
+            except websockets.exceptions.ConnectionClosedOK:
+                log.info("upstox_ws_closed_clean")
+            except Exception as exc:
+                log.warning("upstox_recv_error error=%s", exc)
+            finally:
+                self._running = False
+                self._ws = None
+
+            # Auto-reconnect with exponential backoff (stops if token invalid)
+            for delay in (2, 5, 10, 30, 60):
+                log.info("upstox_reconnecting in=%ds", delay)
+                await asyncio.sleep(delay)
+                try:
+                    token = await self._get_token()
+                    if not token:
+                        log.warning("upstox_reconnect_no_token — user must re-login")
+                        return
+                    ws_url = await self._get_ws_url(token)
+                    self._ws = await websockets.connect(ws_url)
+                    self._running = True
+                    log.info("upstox_reconnected url=%s", ws_url[:60])
+                    if self._subscribed:
+                        await self.subscribe(list(self._subscribed))
+                    break
+                except websockets.exceptions.InvalidStatus as exc:
+                    if exc.response.status_code in (401, 403):
+                        log.warning("upstox_reconnect_token_rejected status=%d — user must re-login", exc.response.status_code)
+                        return  # Don't retry with bad token
+                    log.warning("upstox_reconnect_failed error=%s", exc)
+                except Exception as exc:
+                    log.warning("upstox_reconnect_failed error=%s", exc)
+            else:
+                log.error("upstox_reconnect_exhausted — giving up")
+                return
 
     def _decode_and_enqueue(self, data: bytes) -> None:
         """Decode a FeedResponse protobuf frame and push Quote(s) onto the queue.
@@ -246,16 +366,17 @@ class UpstoxAdapter:
         try:
             ff = feed.fullFeed.marketFF
             ltpc = ff.ltpc
-            if ltpc.ltp:
+            if ltpc.ltp or ltpc.cp:
                 ohlc_vals = _extract_day_ohlc(ff.marketOHLC)
                 if ohlc_vals:
                     o, h, l, c = ohlc_vals
                 else:
                     # No candle data yet — use close price as proxy
                     o = h = l = c = ltpc.cp
+                price = ltpc.ltp or ltpc.cp
                 return Quote(
                     symbol=symbol,
-                    ltp=ltpc.ltp,
+                    ltp=price,
                     open=o,
                     high=h,
                     low=l,
@@ -270,15 +391,16 @@ class UpstoxAdapter:
         try:
             ix = feed.fullFeed.indexFF
             ltpc = ix.ltpc
-            if ltpc.ltp:
+            if ltpc.ltp or ltpc.cp:
                 ohlc_vals = _extract_day_ohlc(ix.marketOHLC)
                 if ohlc_vals:
                     o, h, l, c = ohlc_vals
                 else:
                     o = h = l = c = ltpc.cp
+                price = ltpc.ltp or ltpc.cp
                 return Quote(
                     symbol=symbol,
-                    ltp=ltpc.ltp,
+                    ltp=price,
                     open=o,
                     high=h,
                     low=l,

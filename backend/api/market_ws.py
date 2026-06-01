@@ -88,7 +88,7 @@ class MarketFeedManager:
             ws_set = self._subs.get(quote.symbol, set())
             if not ws_set:
                 continue
-            log.debug("fan_out %s ltp=%.2f clients=%d", quote.symbol, quote.ltp, len(ws_set))
+            log.info("fan_out %s ltp=%.2f clients=%d", quote.symbol, quote.ltp, len(ws_set))
             msg = json.dumps(msg_data)
             dead: list[WebSocket] = []
             for ws in list(ws_set):
@@ -114,6 +114,7 @@ class MarketFeedManager:
             self._cleanup_ws(ws)
 
     async def add_client(self, ws: WebSocket, symbols: list[str]) -> None:
+        log.info("add_client symbols=%s", symbols)
         for sym in symbols:
             was_empty = not self._subs[sym]
             self._subs[sym].add(ws)

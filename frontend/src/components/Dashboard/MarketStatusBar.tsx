@@ -56,8 +56,16 @@ function indiaStatus(): MarketInfo {
     detail = `closes in ${fmtCountdown(CLOSE_M - min)}`;
   } else {
     status = "CLOSED";
-    const next = OPEN_M + (day === 5 ? 3 * 1440 : 1440) - min;
-    detail = `opens ${day === 5 ? "Mon" : dayName(new Date(d.getTime() + 86400_000))} in ${fmtCountdown(next)}`;
+    if (min < OPEN_M) {
+      // Early morning — opens later today
+      detail = `opens in ${fmtCountdown(OPEN_M - min)}`;
+    } else if (day === 5) {
+      // Friday after close — opens Monday
+      detail = `opens Mon in ${fmtCountdown(OPEN_M + 3 * 1440 - min)}`;
+    } else {
+      // Weekday after close — opens tomorrow
+      detail = `opens ${dayName(new Date(d.getTime() + 86400_000))} in ${fmtCountdown(OPEN_M + 1440 - min)}`;
+    }
   }
 
   return {
@@ -150,7 +158,12 @@ function StatusCard({ info }: { info: MarketInfo }) {
   );
 }
 
-export default function MarketStatusBar() {
+interface Props {
+  onToggleIndicators?: () => void;
+  indicatorOpen?: boolean;
+}
+
+export default function MarketStatusBar({ onToggleIndicators, indicatorOpen }: Props) {
   const btcLtp = useLiveQuotesStore((s) => s.quotes["CRYPTO:BTC"]?.ltp ?? null);
   const [tick, setTick] = useState(0);
 
@@ -171,11 +184,29 @@ export default function MarketStatusBar() {
 
   return (
     <div style={{
-      display: "flex", background: TV.bg,
+      display: "flex", alignItems: "center", background: TV.bg,
       borderBottom: `1px solid ${TV.border}`,
       overflowX: "auto", flexShrink: 0,
     }}>
       {markets.map((m) => <StatusCard key={m.label} info={m} />)}
+      <div style={{ flex: 1 }} />
+      {onToggleIndicators && (
+        <button
+          onClick={onToggleIndicators}
+          title="Toggle indicators panel"
+          style={{
+            background: indicatorOpen ? "#2962ff22" : "transparent",
+            border: `1px solid ${indicatorOpen ? "#2962ff" : TV.border}`,
+            borderRadius: 4,
+            color: indicatorOpen ? "#2962ff" : TV.muted,
+            fontSize: 11, padding: "4px 12px",
+            cursor: "pointer", flexShrink: 0,
+            margin: "0 10px",
+          }}
+        >
+          ⊕ Indicators
+        </button>
+      )}
     </div>
   );
 }
