@@ -142,6 +142,14 @@ export default function FnoLive() {
     return () => clearInterval(id);
   }, [refresh]);
 
+  // Initial load + refresh on page visibility restore (tab switch / navigation back)
+  useEffect(() => {
+    void refresh();
+    const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refresh]);
+
   // Fetch real expiries from backend whenever index changes
   useEffect(() => {
     setExpiryOptions([]);
