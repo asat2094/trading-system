@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { apiClient } from "../api/client";
+import { apiClient, isAuthenticated } from "../api/client";
 import { useLiveQuotesStore } from "../store/liveQuotes";
 import * as marketWs from "../lib/marketWs";
 import PcrCards from "../components/Fno/PcrCards";
@@ -141,6 +141,14 @@ export default function FnoLive() {
     }, 1000);
     return () => clearInterval(id);
   }, [refresh]);
+
+  // Ensure WS is connected (singleton — no-op if already open from Dashboard)
+  useEffect(() => {
+    if (isAuthenticated()) {
+      const token = localStorage.getItem("access_token") ?? "";
+      marketWs.connect(token);
+    }
+  }, []);
 
   // Initial load + refresh on page visibility restore (tab switch / navigation back)
   useEffect(() => {
