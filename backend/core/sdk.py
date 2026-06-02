@@ -280,8 +280,16 @@ class MarketData:
         if token is None:
             return pd.DataFrame()
 
-        from_str = from_dt.strftime("%Y-%m-%d %H:%M:%S")
-        to_str   = to_dt.strftime("%Y-%m-%d %H:%M:%S")
+        # Kite API expects datetime strings in IST, not UTC.
+        from zoneinfo import ZoneInfo
+        _IST = ZoneInfo("Asia/Kolkata")
+        def _to_ist_str(dt: datetime) -> str:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+            return dt.astimezone(_IST).strftime("%Y-%m-%d %H:%M:%S")
+
+        from_str = _to_ist_str(from_dt)
+        to_str   = _to_ist_str(to_dt)
         candles  = _call("get_historical_data", {
             "instrument_token": token,
             "interval": kite_interval,
