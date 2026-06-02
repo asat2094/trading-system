@@ -5,6 +5,7 @@ import * as marketWs from "../lib/marketWs";
 import PcrCards from "../components/Fno/PcrCards";
 import OptionsChainTable from "../components/Fno/OptionsChainTable";
 import FnoChartModal from "../components/Fno/FnoChartModal";
+import BrokerConnectButtons from "../components/shared/BrokerConnectButtons";
 import type { FnoSnapshot } from "../components/Fno/types";
 
 const TV = {
@@ -197,6 +198,7 @@ export default function FnoLive() {
         marginBottom: 16, flexWrap: "wrap",
       }}>
         <span style={{ fontSize: 18, fontWeight: 700, color: TV.text }}>FnO Live</span>
+        <div style={{ flex: 1 }} />
 
         {/* Index selector */}
         <select
@@ -301,6 +303,8 @@ export default function FnoLive() {
         </div>
 
         {error && <span style={{ color: "#ef5350", fontSize: 12 }}>{error}</span>}
+
+        <BrokerConnectButtons />
       </div>
 
       {!snapshot && !loading && (
