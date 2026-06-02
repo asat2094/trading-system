@@ -84,7 +84,6 @@ def _load_nfo_instruments() -> None:
     global _NFO_FULL_LOADED
     if _NFO_FULL_LOADED:
         return
-    _NFO_FULL_LOADED = True
     try:
         import gzip, json as _json
         from datetime import datetime as _dt, timezone as _tz
@@ -115,10 +114,10 @@ def _load_nfo_instruments() -> None:
             ts_display = item.get("trading_symbol", "")
             _KEY_TO_SYMBOL[key] = f"{exch}:{ts_display}"
             count += 1
+        _NFO_FULL_LOADED = True
         log.info("nfo_instruments_loaded count=%d", count)
     except Exception as exc:
         log.warning("nfo_instruments_load_error error=%s", exc)
-        _NFO_FULL_LOADED = False
 
 
 def _parse_compact_nfo_ticker(ticker: str) -> tuple[str, int, str, str] | None:
@@ -316,6 +315,13 @@ class UpstoxAdapter:
         self._subscribed: set[str] = set()
         self._running = False
 
+    async def _preload_nfo_instruments(self) -> None:
+        """Load NFO instrument index in a thread so first subscription doesn't block event loop."""
+        if _NFO_FULL_LOADED:
+            return
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _load_nfo_instruments)
+
     async def _get_token(self) -> str | None:
         """Fetch the stored Upstox access token from Redis."""
         raw = await self._redis.get("upstox:token")
@@ -370,6 +376,8 @@ class UpstoxAdapter:
         self._running = True
         log.info("upstox_connected url=%s", ws_url[:60])
         asyncio.create_task(self._recv_loop())
+        # Pre-load NFO instrument index in background so first subscription doesn't block
+        asyncio.create_task(self._preload_nfo_instruments())
         # Re-subscribe any symbols from a previous connection
         if self._subscribed:
             await self.subscribe(list(self._subscribed))
@@ -384,7 +392,11 @@ class UpstoxAdapter:
             log.warning("upstox_subscribe_skipped: not connected")
             return
         token = await self._get_token()
-        keys = [_to_upstox_ws_key(s, access_token=token) for s in symbols]
+        # Run key resolution in executor — NFO lookup may trigger blocking HTTP download
+        loop = asyncio.get_running_loop()
+        keys = await loop.run_in_executor(
+            None, lambda: [_to_upstox_ws_key(s, access_token=token) for s in symbols]
+        )
         self._subscribed.update(symbols)
         msg = json.dumps({
             "guid": "mf-sub",
