@@ -36,7 +36,7 @@ export const DEFAULT_INDICATOR_INPUTS: Record<IndicatorType, Record<string, numb
   Stoch:         { k: 14, d: 3, smooth: 3 },
   VolumeProfile: { rows: 24, valueAreaPct: 70 },
   FVG:           { minGapPct: 0.1, showLabels: true, extendBoxes: true },
-  Pivot:         { pivotType: "standard", period: "daily" },
+  Pivot:         { pivotType: "standard", pivotPeriod: "daily" },
 };
 
 export const DEFAULT_INDICATOR_STYLE: Record<IndicatorType, Record<string, string>> = {

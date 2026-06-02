@@ -345,7 +345,7 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
                   const pivots = calcPivots(
                     [...bars].sort((a,b) => tsToUnix(a.ts) - tsToUnix(b.ts)),
                     String(ind.inputs.pivotType ?? "standard"),
-                    String(ind.inputs.period ?? "daily")
+                    String(ind.inputs.pivotPeriod ?? ind.inputs.period ?? "daily")
                   );
                   if (!pivots) return null;
                   const levels: [string, number, string, string][] = [
@@ -446,7 +446,7 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
                   const last = arr[arr.length-1]; if (!isNaN(last)) { const y = cs.priceToCoordinate(last); if (y != null) labels.push({ id: `${ind.id}-${sfx}`, y, value: last, color: sty[ck] ?? "#2196f3" }); }
                 }
               } else if (ind.type === "Pivot") {
-                const pivots = calcPivots(sorted, String(ind.inputs.pivotType ?? "standard"), String(ind.inputs.period ?? "daily"));
+                const pivots = calcPivots(sorted, String(ind.inputs.pivotType ?? "standard"), String(ind.inputs.pivotPeriod ?? ind.inputs.period ?? "daily"));
                 if (pivots) {
                   const levels: [string, number, string, string][] = [
                     ["pp", pivots.pp, sty.ppColor ?? "#2196f3", "PP"],

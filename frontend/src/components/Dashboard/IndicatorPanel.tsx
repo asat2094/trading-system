@@ -50,7 +50,7 @@ const SELECT_OPTIONS: Record<string, { value: string; label: string }[]> = {
     { value: "woodie",    label: "Woodie" },
     { value: "camarilla", label: "Camarilla" },
   ],
-  period: [
+  pivotPeriod: [
     { value: "daily",   label: "Daily" },
     { value: "weekly",  label: "Weekly" },
     { value: "monthly", label: "Monthly" },
@@ -138,7 +138,7 @@ function SettingsLayer({ paneId, indicator, onBack, mode, local }: SettingsLayer
             {Object.entries(draft.inputs).map(([key, value]) => (
               <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                 <label style={{ fontSize: 11, color: TV.muted, textTransform: "capitalize", flexShrink: 0 }}>
-                  {key === "pivotType" ? "Type" : key === "showBands" ? "Show Bands" : key}
+                  {key === "pivotType" ? "Type" : key === "pivotPeriod" ? "Period" : key === "showBands" ? "Show Bands" : key}
                 </label>
                 {SELECT_OPTIONS[key] ? (
                   <select
