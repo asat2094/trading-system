@@ -120,6 +120,9 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
 
   const chartRef  = useRef<ChartHandle>(null);
   const barsRef   = useRef<Bar[]>([]);
+  // Track last cumulative volume seen per symbol to compute per-tick delta.
+  // Upstox WS sends VTT (volume traded today, cumulative) not per-tick volume.
+  const lastCumVolRef = useRef<number>(0);
 
   // Drawing state
   const [drawMode, setDrawMode]       = useState<DrawMode>("cursor");
@@ -143,6 +146,7 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
 
   const loadInitial = useCallback(async () => {
     setLoading(true); setBars([]); setLiveBar(null); barsRef.current = [];
+    lastCumVolRef.current = 0;
     try {
       const days   = TF_DAYS[timeframe] ?? 30;
       const toDt   = new Date().toISOString().slice(0, 19) + "Z";
@@ -187,17 +191,24 @@ export default function ChartUnit({ symbol, timeframe, paneId, focused, onFocus 
       const lastDisplayTime   = (lastOpenTime + tfOffsetSec) as UTCTimestamp;
       const candleStartSec    = Math.floor(candleFloor(new Date(q.ts).getTime(), timeframe) / 1000);
       try {
+        // q.volume is cumulative (VTT — volume traded today). Compute delta.
+        const cumVol  = q.volume;
+        const volDelta = lastCumVolRef.current > 0 && cumVol >= lastCumVolRef.current
+          ? cumVol - lastCumVolRef.current
+          : cumVol > 0 ? cumVol : 0;
+        lastCumVolRef.current = cumVol;
+
         if (candleStartSec === lastOpenTime) {
-          const u: Bar = { ...last, high: Math.max(last.high, q.ltp), low: Math.min(last.low, q.ltp), close: q.ltp, volume: last.volume + q.volume };
+          const u: Bar = { ...last, high: Math.max(last.high, q.ltp), low: Math.min(last.low, q.ltp), close: q.ltp, volume: last.volume + volDelta };
           barsRef.current[barsRef.current.length - 1] = u; setLiveBar(u);
           cs.update({ time: lastDisplayTime, open: u.open, high: u.high, low: u.low, close: u.close });
           vs?.update({ time: lastDisplayTime, value: u.volume, color: u.close >= u.open ? "#26a69a66" : "#ef535066" });
         } else if (candleStartSec > lastOpenTime) {
           const dt = (candleStartSec + tfOffsetSec) as UTCTimestamp;
-          const nb: Bar = { ts: msToTs(candleStartSec * 1000), open: q.ltp, high: q.ltp, low: q.ltp, close: q.ltp, volume: q.volume };
+          const nb: Bar = { ts: msToTs(candleStartSec * 1000), open: q.ltp, high: q.ltp, low: q.ltp, close: q.ltp, volume: volDelta };
           barsRef.current.push(nb); setLiveBar(nb);
           cs.update({ time: dt, open: q.ltp, high: q.ltp, low: q.ltp, close: q.ltp });
-          vs?.update({ time: dt, value: q.volume, color: "#26a69a66" });
+          vs?.update({ time: dt, value: volDelta, color: "#26a69a66" });
         }
       } catch { /* ignore */ }
     });
