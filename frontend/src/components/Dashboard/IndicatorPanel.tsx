@@ -193,11 +193,13 @@ function SettingsLayer({ paneId, indicator, onBack, mode, local }: SettingsLayer
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {Object.entries(draft.style).map(([key, value]) => (
               <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                <label style={{ fontSize: 11, color: TV.muted, textTransform: "capitalize", flexShrink: 0 }}>{key}</label>
+                <label style={{ fontSize: 11, color: TV.muted, flexShrink: 0 }}>
+                  {key.replace(/([A-Z])/g, " $1").replace(/color$/i, "").replace(/^\s+|\s+$/g, "").replace(/\b\w/g, c => c.toUpperCase()) || key}
+                </label>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <input
                     type="color"
-                    value={value.length === 7 ? value : "#888888"}
+                    value={/^#[0-9a-fA-F]{6}/.test(value) ? value.slice(0, 7) : "#888888"}
                     onChange={(e) => setDraft((d) => ({ ...d, style: { ...d.style, [key]: e.target.value } }))}
                     style={{ width: 28, height: 22, border: "none", borderRadius: 3, cursor: "pointer", padding: 0, background: "transparent" }}
                   />

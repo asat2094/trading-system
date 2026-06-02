@@ -12,7 +12,7 @@ export type StudyConfig =
   | { id: string; type: "Stoch";         k: number; d: number; smooth: number; kColor: string; dColor: string }
   | { id: string; type: "VolumeProfile"; rows: number; valueAreaPct: number; upColor: string; downColor: string; pocColor: string }
   | { id: string; type: "FVG";           minGapPct: number; showLabels: boolean; extendBoxes: boolean; bullColor: string; bearColor: string; opacity: number }
-  | { id: string; type: "Pivot";         pivotType: string; period: string; ppColor: string; rColor: string; sColor: string };
+  | { id: string; type: "Pivot";         pivotType: string; pivotPeriod: string; ppColor: string; rColor: string; sColor: string };
 
 export const STUDY_DEFAULTS: { [K in StudyType]: Omit<Extract<StudyConfig, { type: K }>, "id"> } = {
   EMA:           { type: "EMA",           period: 20, color: "#f7c948", source: "close" },
@@ -24,7 +24,7 @@ export const STUDY_DEFAULTS: { [K in StudyType]: Omit<Extract<StudyConfig, { typ
   Stoch:         { type: "Stoch",         k: 14, d: 3, smooth: 3, kColor: "#2196f3", dColor: "#f7c948" },
   VolumeProfile: { type: "VolumeProfile", rows: 24, valueAreaPct: 70, upColor: "#26a69a88", downColor: "#ef535088", pocColor: "#f59e0b" },
   FVG:           { type: "FVG",           minGapPct: 0.1, showLabels: true, extendBoxes: true, bullColor: "#26a69a", bearColor: "#ef5350", opacity: 0.15 },
-  Pivot:         { type: "Pivot",         pivotType: "standard", period: "daily", ppColor: "#2196f3", rColor: "#26a69a", sColor: "#ef5350" },
+  Pivot:         { type: "Pivot",         pivotType: "standard", pivotPeriod: "daily", ppColor: "#2196f3", rColor: "#26a69a", sColor: "#ef5350" },
 };
 
 export const OVERLAY_TYPES: StudyType[]    = ["EMA", "SMA", "BB", "VWAP", "Pivot", "VolumeProfile", "FVG"];
@@ -41,6 +41,6 @@ export function studyLabel(s: StudyConfig): string {
     case "Stoch":         return `Stoch(${s.k},${s.d})`;
     case "VolumeProfile": return `VP(${s.rows})`;
     case "FVG":           return "FVG";
-    case "Pivot":         return `Pivot(${s.pivotType},${s.period})`;
+    case "Pivot":         return `Pivot(${s.pivotType},${s.pivotPeriod})`;
   }
 }
