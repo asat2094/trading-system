@@ -80,10 +80,17 @@ export default function BrokerConnectButtons() {
     }
   };
 
-  // Check Kite status on mount
+  // Check both broker statuses on mount
   useEffect(() => {
     apiClient.get("/auth/kite/status").then(({ data }) => {
       useLiveQuotesStore.getState().setKiteStatus(data.connected, data.user);
+    }).catch(() => {});
+    apiClient.get("/auth/upstox/status").then(({ data }) => {
+      const store = useLiveQuotesStore.getState();
+      store.setUpstoxHasToken(data.connected);
+      if (data.connected) {
+        store.setBrokerStatus({ ...store.brokerStatus, upstox: "connected" });
+      }
     }).catch(() => {});
   }, []);
 
@@ -94,6 +101,10 @@ export default function BrokerConnectButtons() {
       if (!ALLOWED.has(evt.origin)) return;
       if (evt.data?.type === "upstox-auth-complete") {
         try {
+          // Trigger backend WS reconnect with new token, then check status
+          await apiClient.post("/auth/upstox/reconnect").catch(() => {});
+          // Poll status briefly — WS reconnect is async, give it 2s
+          await new Promise(r => setTimeout(r, 2000));
           const { data } = await apiClient.get("/auth/upstox/status");
           const store = useLiveQuotesStore.getState();
           store.setUpstoxHasToken(data.connected);

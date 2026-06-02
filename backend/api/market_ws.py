@@ -71,7 +71,7 @@ class MarketFeedManager:
         log.error(f"adapter_failed_permanently name={adapter.name}")
 
     async def reconnect_adapter(self, adapter_name: str) -> None:
-        """Called after OAuth token stored — reconnect a previously-failed adapter."""
+        """Called after OAuth token stored — forcibly reconnect an adapter."""
         seen = set()
         for adapter in self._adapters.values():
             if id(adapter) in seen:
@@ -79,6 +79,11 @@ class MarketFeedManager:
             seen.add(id(adapter))
             if adapter.name == adapter_name:
                 log.info(f"adapter_reconnect_triggered name={adapter_name}")
+                # Disconnect first so connect() isn't skipped by _running guard
+                try:
+                    await adapter.disconnect()
+                except Exception:
+                    pass
                 asyncio.create_task(self._connect_with_retry(adapter))
 
     async def _fan_out(self, adapter: BrokerAdapter) -> None:
