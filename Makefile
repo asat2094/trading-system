@@ -1,4 +1,4 @@
-.PHONY: up down purge api worker frontend seed migrate logs test dev install
+.PHONY: up down purge api worker frontend seed migrate logs test dev install kill restart start docker-fix
 
 PYTHON    := backend/.venv/bin/python
 UVICORN   := backend/.venv/bin/uvicorn
@@ -86,3 +86,42 @@ dev: up migrate seed
 	@echo "Starting API + worker (Ctrl-C to stop)..."
 	@trap 'kill 0' INT; \
 		make api & make worker & wait
+
+# Force-restart Docker Desktop when it becomes unresponsive (Mac only)
+docker-fix:
+	@echo "Restarting Docker Desktop..."
+	@killall Docker 2>/dev/null || true
+	@sleep 2
+	@open -a Docker
+	@echo "Waiting for Docker daemon..."
+	@until docker ps >/dev/null 2>&1; do sleep 2; done
+	@echo "Docker ready. Run: make up"
+
+# Kill any running api/worker/frontend processes
+kill:
+	@echo "Killing existing processes on :8000 and :5173..."
+	@lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+	@lsof -ti :5173 | xargs kill -9 2>/dev/null || true
+	@pkill -f "workers.main" 2>/dev/null || true
+	@sleep 1
+	@echo "Done."
+
+# Quick restart — kill + relaunch api/worker/frontend (no infra/migrate/seed)
+restart: kill
+	@echo ""
+	@echo "  API      → http://localhost:8000"
+	@echo "  Frontend → http://localhost:5173"
+	@echo ""
+	@trap 'kill 0' INT; \
+		make api & make worker & make frontend & wait
+
+# Full start — infra + migrate + seed + kill + launch
+start: up migrate seed kill
+	@echo ""
+	@echo "  API      → http://localhost:8000"
+	@echo "  Frontend → http://localhost:5173"
+	@echo "  Temporal → http://localhost:8080"
+	@echo "  Grafana  → http://localhost:3000"
+	@echo ""
+	@trap 'kill 0' INT; \
+		make api & make worker & make frontend & wait

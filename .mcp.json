@@ -1,8 +1,10 @@
 {
   "mcpServers": {
     "code-review-graph": {
-      "command": "/Users/ankitatiwari/.venvs/crg/bin/code-review-graph",
+      "command": "npx",
       "args": [
+        "caveman-shrink",
+        "/Users/ankitatiwari/.venvs/crg/bin/code-review-graph",
         "serve"
       ],
       "cwd": "/Users/ankitatiwari/Desktop/claude-playground/trading-system",

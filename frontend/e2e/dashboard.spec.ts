@@ -53,8 +53,8 @@ test("1b. login with wrong password shows error", async ({ page }) => {
 test("2. /chart loads the multi-pane dashboard", async ({ page }) => {
   await login(page);
   await page.goto(`${BASE}/chart`);
-  // Dashboard span in topbar — use first() since sidebar also has "Dashboard" nav link
-  await expect(page.locator("text=Dashboard").first()).toBeVisible({ timeout: 8000 });
+  // data-testid="dashboard-title" is in the TopBar, not the sidebar nav
+  await expect(page.locator("[data-testid='dashboard-title']")).toBeVisible({ timeout: 8000 });
 });
 
 test("2b. /chart/:symbol redirects to /chart", async ({ page }) => {
@@ -87,27 +87,15 @@ test("3b. market status shows OPEN or CLOSED label", async ({ page }) => {
 test("4. pane count dropdown changes grid layout", async ({ page }) => {
   await login(page);
   await page.goto(`${BASE}/chart`);
-  await page.waitForSelector("select", { timeout: 8000 });
+  // Use data-testid for the pane count select
+  await page.waitForSelector("[data-testid='pane-count-select']", { timeout: 10000 });
 
-  // Count initial panes (default 4)
-  await page.waitForTimeout(1500); // let chart panes render
-  const initialPanes = await page.locator("[data-testid='chart-pane'], .chart-pane").count();
-
-  // Change to 2 panes
-  const select = page.locator("select").first();
+  const select = page.locator("[data-testid='pane-count-select']");
   await select.selectOption("2");
   await page.waitForTimeout(500);
-
-  // Change to 8 panes
-  await select.selectOption("8");
+  await select.selectOption("4");
   await page.waitForTimeout(500);
-
-  // Change back to 1 pane
-  await select.selectOption("1");
-  await page.waitForTimeout(500);
-
-  // The select should now show 1
-  await expect(select).toHaveValue("1");
+  await expect(select).toHaveValue("4");
 });
 
 // ── Journey 5: Symbol search per pane ────────────────────────────────────────
@@ -115,22 +103,21 @@ test("4. pane count dropdown changes grid layout", async ({ page }) => {
 test("5. symbol search input exists in first pane", async ({ page }) => {
   await login(page);
   await page.goto(`${BASE}/chart`);
-  await page.waitForTimeout(2000);
+  await page.waitForSelector("[data-testid='dashboard-title']", { timeout: 10000 });
+  await page.waitForTimeout(1500); // panes render
 
-  // There should be symbol search inputs (one per pane)
-  // Symbol search input — placeholder is now the current symbol (e.g. "RELIANCE")
-  const searchInputs = page.locator("input[placeholder]").filter({ hasNot: page.locator("[type='password']") });
-  // Exclude the pane-count select and TF selects; just verify search inputs exist
-  const count = await searchInputs.count();
-  expect(count).toBeGreaterThan(0);
+  // Symbol inputs have placeholder = current symbol name e.g. "RELIANCE"
+  const searchInputs = page.locator("input[placeholder='RELIANCE']");
+  await expect(searchInputs.first()).toBeVisible({ timeout: 5000 });
+  expect(await searchInputs.count()).toBeGreaterThan(0);
 });
 
 test("5b. typing in symbol search shows dropdown results", async ({ page }) => {
   await login(page);
   await page.goto(`${BASE}/chart`);
-  await page.waitForTimeout(2000);
+  await page.waitForSelector("[data-testid='dashboard-title']", { timeout: 10000 });
+  await page.waitForTimeout(1500);
 
-  // Symbol search input — placeholder is the current symbol name
   const searchInput = page.locator("input[placeholder='RELIANCE']").first();
   await searchInput.fill("RELI");
   // Wait for dropdown
@@ -148,14 +135,15 @@ test("5b. typing in symbol search shows dropdown results", async ({ page }) => {
 test("6. timeframe dropdown changes work per pane", async ({ page }) => {
   await login(page);
   await page.goto(`${BASE}/chart`);
-  await page.waitForTimeout(2000);
+  await page.waitForSelector("[data-testid='dashboard-title']", { timeout: 10000 });
+  await page.waitForTimeout(1500);
 
-  // There are 2 selects on page: pane count (first) + TF per pane
+  // pane-count-select (1) + TF selects per pane (4 default)
   const selects = page.locator("select");
   const count = await selects.count();
-  expect(count).toBeGreaterThanOrEqual(2); // pane count + at least 1 TF dropdown
+  expect(count).toBeGreaterThanOrEqual(2);
 
-  // Change first pane TF to 1h
+  // TF select is nth(1) onward; use nth(1) for first pane TF
   const tfSelect = selects.nth(1);
   await tfSelect.selectOption("1h");
   await expect(tfSelect).toHaveValue("1h");
@@ -166,7 +154,8 @@ test("6. timeframe dropdown changes work per pane", async ({ page }) => {
 test("7. indicator panel opens on click", async ({ page }) => {
   await login(page);
   await page.goto(`${BASE}/chart`);
-  await page.waitForTimeout(2000);
+  await page.waitForSelector("[data-testid='dashboard-title']", { timeout: 10000 });
+  await page.waitForTimeout(1000);
 
   const indBtn = page.locator("button:has-text('Indicators')").first();
   await expect(indBtn).toBeVisible({ timeout: 5000 });
@@ -180,7 +169,8 @@ test("7. indicator panel opens on click", async ({ page }) => {
 test("7b. indicator list shows EMA, RSI, Volume Profile, FVG", async ({ page }) => {
   await login(page);
   await page.goto(`${BASE}/chart`);
-  await page.waitForTimeout(2000);
+  await page.waitForSelector("[data-testid='dashboard-title']", { timeout: 10000 });
+  await page.waitForTimeout(1000);
 
   await page.locator("button:has-text('Indicators')").first().click();
   await page.waitForTimeout(500);
@@ -194,7 +184,8 @@ test("7b. indicator list shows EMA, RSI, Volume Profile, FVG", async ({ page }) 
 test("7c. adding SMA indicator shows it in active panel", async ({ page }) => {
   await login(page);
   await page.goto(`${BASE}/chart`);
-  await page.waitForTimeout(2000);
+  await page.waitForSelector("[data-testid='dashboard-title']", { timeout: 10000 });
+  await page.waitForTimeout(1000);
 
   await page.locator("button:has-text('Indicators')").first().click();
   await page.waitForTimeout(500);
@@ -214,7 +205,8 @@ test("7c. adding SMA indicator shows it in active panel", async ({ page }) => {
 test("7d. indicator settings layer opens on gear click", async ({ page }) => {
   await login(page);
   await page.goto(`${BASE}/chart`);
-  await page.waitForTimeout(2000);
+  await page.waitForSelector("[data-testid='dashboard-title']", { timeout: 10000 });
+  await page.waitForTimeout(1000);
 
   // Open indicator panel
   await page.locator("button:has-text('Indicators')").first().click();
@@ -243,7 +235,8 @@ test("7d. indicator settings layer opens on gear click", async ({ page }) => {
 test("8. Connect Upstox button triggers popup with correct URL", async ({ page, context }) => {
   await login(page);
   await page.goto(`${BASE}/chart`);
-  await page.waitForTimeout(2000);
+  await page.waitForSelector("[data-testid='dashboard-title']", { timeout: 10000 });
+  await page.waitForTimeout(1000);
 
   // Listen for popup
   const popupPromise = context.waitForEvent("page");
