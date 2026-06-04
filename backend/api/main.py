@@ -9,6 +9,8 @@ from api.routers.technical import warm_symbol_cache
 from api.signals_ws import websocket_endpoint
 from api.market_ws import market_ws_endpoint, get_manager
 from api.routers.market import router as market_router
+from api.routers.journal import router as journal_router
+from journal.db import init_journal_tables, seed_default_rules
 from core.logging import setup_logging
 
 
@@ -16,6 +18,8 @@ from core.logging import setup_logging
 async def lifespan(app: FastAPI):
     # Pre-warm symbol cache in background — doesn't block startup
     asyncio.create_task(warm_symbol_cache())
+    await init_journal_tables()
+    await seed_default_rules()
     # Start market feed adapters
     from brokers.upstox import UpstoxAdapter
     from brokers.hyperliquid import HyperliquidAdapter
@@ -50,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(fno.router)
     app.include_router(market_router)
+    app.include_router(journal_router)
 
     @app.websocket("/ws/market")
     async def market_ws(ws: WebSocket, token: str):

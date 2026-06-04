@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { path: "/signals",  icon: "🔔", label: "Signals" },
   { path: "/chat",     icon: "💬", label: "AI Chat" },
   { path: "/fno",      icon: "📈", label: "FnO Live" },
+  { path: "/journal",  icon: "📓", label: "Journal" },
 ];
 
 const TV = {
