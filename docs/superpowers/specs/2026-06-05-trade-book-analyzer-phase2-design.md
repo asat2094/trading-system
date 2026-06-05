@@ -461,6 +461,14 @@ DataFrame with `ts, open, high, low, close, volume`). Only when a specific contr
 never ingested does the DataFrame come back empty → graceful banner, MFE/MAE NULL. Never
 crash, never block.
 
+**The table has EXACTLY these columns — no open interest, IV, greeks, or bid/ask.** The
+source feed (icharts) emits only OHLCV+volume; do not query or expect any greeks/OI column.
+The stored `close` is the option **premium** in ₹, same unit as the contract-note entry/exit
+price — so price lines and MFE/MAE math are unit-consistent with the pair's prices.
+Physical design (do not alter): `ts` designated timestamp, partition by MONTH, WAL + dedup
+on `(ts, symbol)` → re-ingestion is idempotent. `symbol` is QuestDB `SYMBOL` type (fast
+equality filter); always query with `symbol = '<exact>'`.
+
 ### 5.2 Building the QuestDB symbol for a pair
 
 QuestDB symbol form is `[UNDERLYING][YY][MON3][DD][STRIKE][CE|PE]`. The pair already
@@ -741,5 +749,8 @@ memory; commit per stage, push at end.
 - SSE/streaming LLM output — non-streaming POST only.
 - Scheduled bulk backfill of MFE/MAE for already-imported pairs (computed on
   recompute + on first chart open; no cron job this phase).
+- Option greeks / OI / IV at entry — NOT in the data pipeline (icharts emits OHLCV+volume
+  only) and not backfillable historically. A future feature could snapshot the live option
+  chain at trade time into a `jrn_trades.greeks JSONB` for same-day API imports; not Phase 2.
 - Automatic R-multiple (no stop data) — user supplies `risk_amount` or it stays null.
 - Scheduled excursion backfill job.
