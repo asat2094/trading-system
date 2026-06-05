@@ -23,12 +23,14 @@ Hard facts verified in this codebase (do not re-derive, do not assume otherwise)
 2. **No SSE / streaming exists in this codebase. `EventSource` cannot POST.**
    LLM analysis is therefore a **plain POST that returns the full text in one JSON
    response**. Do NOT build server-sent events. Do NOT use `EventSource`.
-3. **QuestDB `ohlcv_1min` holds spot/index/equity bars only — NOT option premiums.**
-   Option contract candles come from `MarketData.live_ohlcv(symbol, "1min", from, to)`
-   in `backend/core/sdk.py`, which routes `NFO:`/`BFO:`-prefixed symbols to Kite MCP
-   and only has **recent/live** depth. Past-dated PDF trades will frequently have NO
-   option candles. The chart and MFE/MAE MUST degrade gracefully (return null, show a
-   banner) — never crash, never block the page.
+3. **QuestDB `ohlcv_1min` DOES hold option premium candles** (verified: 355M rows; option
+   symbols span 2019→2026). Stored symbol form is
+   `[UNDERLYING][YY][MON3][DD][STRIKE][CE|PE]`, e.g. `SENSEX26JAN0184100PE`,
+   `BANKNIFTY21DEC0935900PE`. Fetch via `MarketData.ohlcv(qdb_symbol, "1min", from, to)`
+   (the QuestDB historical path — NOT `live_ohlcv`/Kite MCP). Per-contract coverage is the
+   option's active window only (a weekly carries ~days of bars), so a specific contract may
+   occasionally be missing → chart/MFE/MAE still degrade gracefully (null + banner), but
+   this is the edge case now, not the norm.
 4. **Anthropic client pattern is fixed.** Copy `backend/llm/translator.py`:
    `client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY.get_secret_value())`,
    model = `settings.LLM_MODEL`. anthropic 0.102.0 is installed. Do NOT invent
@@ -50,7 +52,7 @@ Hard facts verified in this codebase (do not re-derive, do not assume otherwise)
 |---|---|---|
 | **A** | Metrics engine + P&L calendar + aggregate Analytics tab | none (pure DB/compute) |
 | **B** | Pair detail page + annotations + structured tags + rule engine | none (pure DB) |
-| **C** | Pair chart (live_ohlcv) + MFE/MAE + replay | Kite MCP (degrades) |
+| **C** | Pair chart (QuestDB ohlcv) + MFE/MAE + replay | QuestDB (local) |
 | **D** | LLM analysis (non-streaming POST) + Kite/Upstox API import | anthropic, broker auth |
 
 Build A→B→C→D. Each stage ends with its own passing tests before the next starts.
@@ -450,34 +452,41 @@ Frontend (Playwright):
 
 ## 5. Stage C — Pair Chart + MFE/MAE + Replay
 
-### 5.1 Reality of option candles (drives the whole design)
+### 5.1 Option candles are in QuestDB (historical, deep)
 
-Option premium candles come ONLY from `MarketData.live_ohlcv(symbol, "1min", from, to)`
-with a `NFO:`/`BFO:`-prefixed Kite-style symbol, and only have **recent** depth (Kite MCP).
-The historical `ohlcv_1min` QuestDB table does NOT contain options. Therefore:
+`ohlcv_1min` contains option premium bars (verified, 2019→2026), so chart + MFE/MAE work
+for essentially any dated option trade — PDF or API, old or recent. Fetch through the
+existing QuestDB path `MarketData.ohlcv(qdb_symbol, "1min", from_dt, to_dt)` (returns a
+DataFrame with `ts, open, high, low, close, volume`). Only when a specific contract was
+never ingested does the DataFrame come back empty → graceful banner, MFE/MAE NULL. Never
+crash, never block.
 
-- Chart + MFE/MAE work for **recent** trades (API-imported today, or PDFs of the last few
-  days while Kite MCP still has the contract).
-- For older PDF dates → `live_ohlcv` returns an empty DataFrame → chart shows a graceful
-  banner, MFE/MAE stay NULL. **This is expected, not a bug. Never crash, never block.**
+### 5.2 Building the QuestDB symbol for a pair
 
-### 5.2 Building the Kite symbol for a pair
-
-The chart symbol is derived from the pair, NOT from QuestDB:
+QuestDB symbol form is `[UNDERLYING][YY][MON3][DD][STRIKE][CE|PE]`. The pair already
+carries decoded `underlying`, `expiry` (DATE), `strike` (INT), `option_type` from Phase 1's
+symbol parser — rebuild deterministically (do NOT reuse the broker raw compact string,
+whose month is single-char):
 
 ```python
-def kite_symbol_for(pair) -> str | None:
-    # exchange BSE→BFO, NSE→NFO; equity/non-option → None (no option chart)
-    if pair["option_type"] not in ("CE", "PE"): return None
-    seg = {"BSE": "BFO", "NSE": "NFO"}.get(pair["exchange"])
-    if not seg: return None
-    # raw_symbol on the entry fill is the broker compact form, e.g. NIFTY2660923200PE.
-    # Strip any " - NSE"/" - BSE" suffix; use the bare contract token.
-    raw = pair["_entry_raw_symbol"].split(" - ")[0].strip()
-    return f"{seg}:{raw}"
+_MON3 = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
+
+def qdb_symbol_for(pair) -> str | None:
+    if pair["option_type"] not in ("CE", "PE"):       # equity/fut → no option chart
+        return None
+    if not (pair.get("expiry") and pair.get("strike") and pair.get("underlying")):
+        return None
+    e = pair["expiry"]                                 # datetime.date
+    yy  = e.year % 100
+    mon = _MON3[e.month - 1]
+    dd  = f"{e.day:02d}"
+    return f"{pair['underlying']}{yy:02d}{mon}{dd}{int(pair['strike'])}{pair['option_type']}"
+# e.g. NIFTY expiry 2026-06-09 strike 23200 PE -> "NIFTY26JUN0923200PE"
 ```
 
-If `kite_symbol_for` returns None → no chart, show "Chart unavailable for this instrument".
+If `qdb_symbol_for` returns None → no chart, show "Chart unavailable for this instrument".
+The exact QuestDB symbol string built here is verified to match stored symbols (e.g.
+`SENSEX26JAN0184100PE`); a unit test asserts the exact output for known pairs.
 
 ### 5.3 Chart data + MFE/MAE endpoint
 
@@ -493,9 +502,9 @@ Server:
    `from = open_datetime - 30min`, `to = close_datetime + 30min` (fallback `open+90min`
    if still open). If `fill_grain='wap'` (no times): `from = open_date 09:15`,
    `to = open_date 15:30`.
-2. `sym = kite_symbol_for(pair)`. If None → `{available:false, reason:"not_option"}`.
-3. `df = await MarketData().live_ohlcv(sym, "1min", from_dt, to_dt)`. If empty →
-   `{available:false, reason:"no_candles"}`.
+2. `sym = qdb_symbol_for(pair)`. If None → `{available:false, reason:"not_option"}`.
+3. `df = await MarketData().ohlcv(sym, "1min", from_dt, to_dt)` (QuestDB historical). If
+   empty → `{available:false, reason:"no_candles"}`.
 4. **Compute MFE/MAE here** (only when candles available) over bars between entry_ts and
    exit_ts (or whole window for WAP):
 
@@ -518,32 +527,35 @@ scalps; MFE/MAE are directional estimates, labeled "≈".
 ### 5.4 Frontend `PairChart.tsx`
 
 - Fetch `/journal/pairs/{id}/chart`. If `available:false` → render banner with `reason`
-  ("No intraday candles for this date" / "Not an options contract"). No chart, no crash.
+  ("No intraday candles for this contract" / "Not an options contract"). No chart, no crash.
 - If available → feed `bars` to the existing `CandlestickChart` (`tfOffsetSec=60`).
 - Entry/exit price lines via `series.createPriceLine({price, color, title})` — entry
   `#26a69a`, exit `#ef5350`.
 - **Replay**: local state `replayIdx:number|null`. Play → `setInterval` advancing idx,
   chart shows `bars.slice(0, idx)`. Speed select 50/200/500 ms. Pause/Reset buttons.
-  Reset → idx null → full chart. Pure client, no backend, no Kite calls during replay.
+  Reset → idx null → full chart. Pure client, no backend calls during replay.
 - Use `tsToUnix` from `lib/time.ts` for any manual time mapping.
 
-### 5.5 Recompute hook for MFE/MAE
+### 5.5 When MFE/MAE are computed
 
-MFE/MAE need candles, which need Kite MCP, which may be slow/absent — so they are NOT
-computed inside the synchronous `_recompute_day`. They are computed lazily by
-`GET /journal/pairs/{id}/chart` (first open of the detail page) and persisted then. A
-nightly/manual `POST /journal/pairs/{id}/refresh-excursion` may recompute; out of scope to
-schedule. Day-summary excursion aggregates simply ignore NULLs.
+QuestDB is local and indexed by `(symbol, ts)` — a per-contract day query is sub-second.
+So MFE/MAE ARE computed inside `_recompute_day` (Stage C onward): for each closed option
+pair, build `qdb_symbol_for`, fetch the day window via `MarketData.ohlcv`, compute and
+persist `mfe/mae/mfe_capture`. Wrap in try/except → on empty/missing candles leave them
+NULL and continue (never fail the recompute). The `GET /pairs/{id}/chart` endpoint
+recomputes opportunistically too (so a contract ingested after import still backfills on
+first detail-page open). Day-summary excursion aggregates ignore NULLs.
 
 ### 5.6 Stage C tests
 
-Backend (`test_chart.py`, mock `MarketData.live_ohlcv`):
-- option pair + mocked bars → MFE/MAE correct sign and magnitude for LONG and SHORT.
-- empty bars → `{available:false, reason:"no_candles"}`, pair MFE/MAE stay NULL.
+Backend (`test_chart.py`, monkeypatch `MarketData.ohlcv` to return a fixture DataFrame):
+- `qdb_symbol_for`: NIFTY 2026-06-09 / 23200 / PE → `"NIFTY26JUN0923200PE"`;
+  SENSEX 2026-01-01 / 84100 / PE → `"SENSEX26JAN0184100PE"`; non-option → None.
+- option pair + fixture bars → MFE/MAE correct sign and magnitude for LONG and SHORT.
+- empty DataFrame → `{available:false, reason:"no_candles"}`, pair MFE/MAE stay NULL.
 - non-option pair → `{available:false, reason:"not_option"}`.
-- `kite_symbol_for`: BSE→`BFO:`, NSE→`NFO:`, strips `" - NSE"` suffix.
 
-Frontend (Playwright, Kite MCP not required — mock the chart endpoint):
+Frontend (Playwright, mock the chart endpoint — no QuestDB needed in CI):
 - available → chart renders, entry price line present, Play animates, Reset restores.
 - unavailable → banner shown, page does not crash, rest of detail page works.
 
@@ -711,7 +723,7 @@ Each journey maps 1:1 to a Playwright test.
 8) rules CRUD. 9) `PairDetailPage` + route, `AnnotationEditor`, `RuleViolations`,
 Rules tab. 10) Stage-B tests green.
 
-**Stage C** 11) `/pairs/{id}/chart` + `kite_symbol_for` + MFE/MAE persist.
+**Stage C** 11) `/pairs/{id}/chart` + `qdb_symbol_for` + MFE/MAE persist (in `_recompute_day`).
 12) `PairChart` + replay. 13) Stage-C tests green.
 
 **Stage D** 14) `analysis.py` + analyze/analysis endpoints (threadpool).
@@ -727,6 +739,7 @@ memory; commit per stage, push at end.
 
 - mStock API import (separate JWT flow) — UI option disabled.
 - SSE/streaming LLM output — non-streaming POST only.
-- Persisting option candles into QuestDB for historical MFE/MAE — lazy compute only.
+- Scheduled bulk backfill of MFE/MAE for already-imported pairs (computed on
+  recompute + on first chart open; no cron job this phase).
 - Automatic R-multiple (no stop data) — user supplies `risk_amount` or it stays null.
 - Scheduled excursion backfill job.
